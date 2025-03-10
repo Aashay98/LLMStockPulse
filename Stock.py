@@ -15,8 +15,6 @@ import getpass
 import streamlit as st
 
 
-
-
 if "GROQ_API_KEY" not in os.environ:
     os.environ["GROQ_API_KEY"] = getpass.getpass("Enter your Groq API key: ")
     
@@ -25,7 +23,7 @@ if not os.environ.get("TAVILY_API_KEY"):
     os.environ["TAVILY_API_KEY"] = getpass.getpass("Tavily API key:\n")
     
 # Initialize LangChain's ChatGroq Model
-llm = ChatGroq(temperature=0.5)
+llm = ChatGroq(model="mistral-saba-24b" ,temperature=0.5)
 
 #API_KEY = "QYBCUX9XUW8ESTIU35U2M531COX26A02"
 
@@ -294,7 +292,7 @@ def create_stock_data_agent(llm):
     return create_tool_calling_agent(llm, tools, prompt)
 
 def create_sentiment_agent(llm):
-    tools = [get_market_sentiment_news]
+    tools = [get_market_sentiment_news, get_news_from_newsapi]
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a sentiment analysis expert. Analyze news sentiment."),
         ("human", "{input}"),
@@ -341,7 +339,7 @@ coordinator_agent = create_coordinator_agent(llm)
 
 # Agent executors
 stock_data_executor = AgentExecutor(agent=stock_data_agent, tools=[get_stock_data, get_stock_analysis], verbose=True)
-sentiment_executor = AgentExecutor(agent=sentiment_agent, tools=[get_market_sentiment_news], verbose=True)
+sentiment_executor = AgentExecutor(agent=sentiment_agent, tools=[get_market_sentiment_news,get_news_from_newsapi], verbose=True)
 insights_executor = AgentExecutor(agent=insights_agent, tools=[tavily_search, process_search_tool], verbose=True)
 general_purpose_executor = AgentExecutor(agent=general_purpose_agent, tools=[tavily_search], verbose=True)
 coordinator_executor = AgentExecutor(agent=coordinator_agent, tools=[], verbose=True)
@@ -423,15 +421,14 @@ def multi_agent_query(query):
 
     return final_response
 
-
-if 'last_question_answer' not in st.session_state:
-    st.session_state.last_question_answer = {}
+if 'question_answers_history' not in st.session_state:
+    st.session_state.question_answers_history = {}
 
 def process_and_clear(stock_question):
-    if stock_question:
+    if stock_question and stock_question.strip():
         # Generate and display the answer
         response = multi_agent_query(stock_question)
-        st.session_state.last_question_answer[stock_question] = response
+        st.session_state.question_answers_history[stock_question] = response
 
 st.write("Stock Information App")
 
@@ -439,12 +436,12 @@ st.write("Stock Information App")
 stock_question = st.chat_input("Which stock do you want to know about today?", key="stock_question")
 
 # Process the input if it exists
-if stock_question:
+if stock_question and stock_question.strip():
     st.write(f"User has sent the following prompt: {stock_question}")
     process_and_clear(stock_question)
 
 # Display the last question and response if they exist
-if st.session_state.last_question_answer:
-    for question, answer in st.session_state.last_question_answer.items():
+if st.session_state.question_answers_history:
+    for question, answer in st.session_state.question_answers_history.items():
         st.write("Question: ", question)
         st.write("Answer: ", answer)

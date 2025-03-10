@@ -12,6 +12,9 @@ import os
 from langchain_groq import ChatGroq
 import getpass
 
+import streamlit as st
+
+st.write("Hello world")
 
 if "GROQ_API_KEY" not in os.environ:
     os.environ["GROQ_API_KEY"] = getpass.getpass("Enter your Groq API key: ")
@@ -21,7 +24,7 @@ if not os.environ.get("TAVILY_API_KEY"):
     os.environ["TAVILY_API_KEY"] = getpass.getpass("Tavily API key:\n")
     
 # Initialize LangChain's ChatGroq Model
-llm = ChatGroq(temperature=0)
+llm = ChatGroq(temperature=0.5)
 
 #API_KEY = "QYBCUX9XUW8ESTIU35U2M531COX26A02"
 

@@ -14,7 +14,8 @@ import getpass
 
 import streamlit as st
 
-st.write("Hello world")
+
+
 
 if "GROQ_API_KEY" not in os.environ:
     os.environ["GROQ_API_KEY"] = getpass.getpass("Enter your Groq API key: ")
@@ -405,7 +406,7 @@ def multi_agent_query(query):
             errors.append(f"❌ Sentiment Agent failed: {str(e)}")
             
     # Step 3: Generate insights (generic input)
-    if query_type in ["stock", "sentiment", "both", "general"]:
+    if query_type in ["stock", "sentiment", "both"]:
         try:
             insights_prompt = generate_insights_prompt(query, query_type)
             insights_response = insights_executor.invoke({"input": insights_prompt})
@@ -423,7 +424,27 @@ def multi_agent_query(query):
     return final_response
 
 
-# Example
-query = "Can you state which llm models are better than Chatgpt 4 and if there are any new models that are better than Chatgpt 4 then explain them?"
-response = multi_agent_query(query)
-print(response)
+if 'last_question_answer' not in st.session_state:
+    st.session_state.last_question_answer = {}
+
+def process_and_clear(stock_question):
+    if stock_question:
+        # Generate and display the answer
+        response = multi_agent_query(stock_question)
+        st.session_state.last_question_answer[stock_question] = response
+
+st.write("Stock Information App")
+
+# Use chat_input without on_submit parameter
+stock_question = st.chat_input("Which stock do you want to know about today?", key="stock_question")
+
+# Process the input if it exists
+if stock_question:
+    st.write(f"User has sent the following prompt: {stock_question}")
+    process_and_clear(stock_question)
+
+# Display the last question and response if they exist
+if st.session_state.last_question_answer:
+    for question, answer in st.session_state.last_question_answer.items():
+        st.write("Question: ", question)
+        st.write("Answer: ", answer)

@@ -14,3 +14,6 @@ pip install -r requirements.txt
 
 If add new library create requirements file:-
 pip freeze > requiremnets.txt
+
+Running Streamlit application
+python -m streamlit run Stock.py

@@ -7,11 +7,10 @@ from langchain.tools import tool
 from bs4 import BeautifulSoup
 import requests
 import asyncio
-import aiohttp
 import os
 from langchain_groq import ChatGroq
 import getpass
-
+from langchain.memory import ConversationBufferMemory
 import streamlit as st
 from sentence_transformers import SentenceTransformer
 import numpy as np
@@ -321,6 +320,7 @@ def create_stock_data_agent(llm):
     tools = [get_stock_data, get_stock_analysis]
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a stock data expert. Fetch and analyze stock data."),
+        ("placeholder", "{chat_history}"),
         ("human", "{input}"),
         ("placeholder", "{agent_scratchpad}"),  # Add agent_scratchpad placeholder
     ])
@@ -330,6 +330,7 @@ def create_sentiment_agent(llm):
     tools = [get_market_sentiment_news]
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a sentiment analysis expert. Analyze news sentiment."),
+        ("placeholder", "{chat_history}"),
         ("human", "{input}"),
         ("placeholder", "{agent_scratchpad}"),  # Add agent_scratchpad placeholder
     ])
@@ -340,6 +341,7 @@ def create_insights_agent(llm):
     tools = [tavily_search, process_search_tool]
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are an insights generator. Provide detailed insights."),
+        ("placeholder", "{chat_history}"),
         ("human", "{input}"),
         ("placeholder", "{agent_scratchpad}"),  # Add agent_scratchpad placeholder
     ])
@@ -349,13 +351,14 @@ def create_general_purpose_agent(llm):
     tools = [tavily_search]  # General-purpose tool like Tavily
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a general-purpose assistant. Answer any query comprehensively."),
+        ("placeholder", "{chat_history}"),
         ("human", "{input}"),
         ("placeholder", "{agent_scratchpad}"),
     ])
     return create_tool_calling_agent(llm, tools, prompt)
 
 
-# Coordinator agent
+# Coordinator agent - Currently not used
 def create_coordinator_agent(llm):
     tools = []  # No tools needed for the coordinator
     prompt = ChatPromptTemplate.from_messages([
@@ -365,6 +368,16 @@ def create_coordinator_agent(llm):
     ])
     return create_tool_calling_agent(llm, tools, prompt)
 
+#initialize memories for each agents
+if "stock_memory" not in st.session_state:
+    st.session_state.stock_memory = ConversationBufferMemory(return_messages=True, memory_key="chat_history")
+if "sentiment_memory" not in st.session_state:
+    st.session_state.sentiment_memory = ConversationBufferMemory(return_messages=True, memory_key="chat_history")
+if "insights_memory" not in st.session_state:
+    st.session_state.insights_memory = ConversationBufferMemory(return_messages=True, memory_key="chat_history")
+if "general_memory" not in st.session_state:
+    st.session_state.general_memory = ConversationBufferMemory(return_messages=True, memory_key="chat_history")
+
 # Initialize agents (replace `llm` with your actual LLM instance)
 stock_data_agent = create_stock_data_agent(llm)
 sentiment_agent = create_sentiment_agent(llm)
@@ -373,10 +386,26 @@ general_purpose_agent = create_general_purpose_agent(llm)
 coordinator_agent = create_coordinator_agent(llm)
 
 # Agent executors
-stock_data_executor = AgentExecutor(agent=stock_data_agent, tools=[get_stock_data, get_stock_analysis], verbose=True)
-sentiment_executor = AgentExecutor(agent=sentiment_agent, tools=[get_market_sentiment_news], verbose=True)
-insights_executor = AgentExecutor(agent=insights_agent, tools=[tavily_search, process_search_tool], verbose=True)
-general_purpose_executor = AgentExecutor(agent=general_purpose_agent, tools=[tavily_search], verbose=True)
+stock_data_executor = AgentExecutor(
+    agent=stock_data_agent, 
+    tools=[get_stock_data, get_stock_analysis],
+    memory=st.session_state.stock_memory, 
+    verbose=True)
+sentiment_executor = AgentExecutor(
+    agent=sentiment_agent, 
+    tools=[get_market_sentiment_news,get_news_from_newsapi], 
+    verbose=True,
+    memory=st.session_state.sentiment_memory)
+insights_executor = AgentExecutor(
+    agent=insights_agent, 
+    tools=[tavily_search, process_search_tool], 
+    verbose=True,
+    memory=st.session_state.insights_memory)
+general_purpose_executor = AgentExecutor(
+    agent=general_purpose_agent, 
+    tools=[tavily_search], 
+    verbose=True, 
+    memory=st.session_state.general_memory)
 coordinator_executor = AgentExecutor(agent=coordinator_agent, tools=[], verbose=True)
 
 
@@ -412,29 +441,53 @@ def generate_insights_prompt(query, query_type):
 
         
 def multi_agent_query(query):
+    # Update conversation history
+    if "conversation_history" not in st.session_state:
+        st.session_state.conversation_history = []
+    
+    # Add the user query to conversation history
+    st.session_state.conversation_history.append({"role": "user", "content": query})    
+    
     responses = []
     errors = []
     query_type = classify_query(query)
     print(query_type)
-
+    
+    context = ""
+    if len(st.session_state.conversation_history) > 1:
+        previous_exchanges = st.session_state.conversation_history[-5:-1]  # Get up to 4 previous exchanges
+        for exchange in previous_exchanges:
+            if exchange.get("role") == "assistant":
+                context += f"Previous response: {exchange.get('content')}\n"
 
     # Fetch stock data if it's a stock-related query
     if query_type in ["stock", "both"]:
         try:
-            stock_data_response = stock_data_executor.invoke(
-                {"input": f"Retrieve the latest stock data and market trends for {query}. Provide key statistics, including open, high, low, close, and volume."}
-            )
+            stock_data_response = stock_data_executor.invoke({
+                "chat_history": st.session_state.stock_memory.load_memory_variables({})["chat_history"],
+                "input": f"Retrieve the latest stock data and market trends for {query}. Provide key statistics, including open, high, low, close, and volume."
+            })
             responses.append(f"**Stock Data Analysis**:\n{stock_data_response['output']}")
+            st.session_state.stock_memory.save_context(
+                {"input": query}, 
+                {"output": stock_data_response['output']}
+            )
         except Exception as e:
             errors.append(f"❌ Stock Data Agent failed: {str(e)}")
 
     # Fetch sentiment analysis if it's related to financial sentiment
     if query_type in ["sentiment", "both"]:
         try:
-            sentiment_response = sentiment_executor.invoke(
-                {"input": f"Analyze the market sentiment for {query}. Summarize the tone of recent news articles, social media discussions, and investor opinions."}
-            )
+            sentiment_response = sentiment_executor.invoke({   
+                "chat_history": st.session_state.sentiment_memory.load_memory_variables({})["chat_history"],
+                "input": f"Analyze the market sentiment for {query}. Summarize the tone of recent news articles, social media discussions, and investor opinions."
+            })
             responses.append(f"**Sentiment Analysis**:\n{sentiment_response['output']}")
+            # Save to memory
+            st.session_state.sentiment_memory.save_context(
+                {"input": query}, 
+                {"output": sentiment_response['output']}
+            )
         except Exception as e:
             errors.append(f"❌ Sentiment Agent failed: {str(e)}")
             
@@ -442,42 +495,60 @@ def multi_agent_query(query):
     if query_type in ["stock", "sentiment", "both", "general"]:
         try:
             insights_prompt = generate_insights_prompt(query, query_type)
-            insights_response = insights_executor.invoke({"input": insights_prompt})
+            insights_response = insights_executor.invoke({
+                "chat_history": st.session_state.sentiment_memory.load_memory_variables({})["chat_history"],
+                "input": insights_prompt
+            })
             responses.append(f"**Insights**:\n{insights_response['output']}")
+            # Save to memory
+            st.session_state.insights_memory.save_context(
+                {"input": insights_prompt}, 
+                {"output": insights_response['output']}
+            )
         except Exception as e:
             errors.append(f"❌ Insights Agent failed: {str(e)}")
 
     # Combine responses
     final_response = "\n\n".join(responses) if responses else "No data available."
 
+    st.session_state.conversation_history.append({"role": "assistant", "content": final_response})
+
     # Append errors if any agents failed
     if errors:
         final_response += "\n\n**Errors**:\n" + "\n".join(errors)
-
     return final_response
 
+def display_chat_history():
+    if "conversation_history" in st.session_state:
+        for message in st.session_state.conversation_history:
+            if message["role"] == "user":
+                st.chat_message("user").write(message["content"])
+            else:
+                st.chat_message("assistant").write(message["content"])
 
-if 'last_question_answer' not in st.session_state:
-    st.session_state.last_question_answer = {}
+# Initialize session state for storing conversation history
+if 'conversation_history' not in st.session_state:
+    st.session_state.conversation_history = []
 
-def process_and_clear(stock_question):
-    if stock_question:
-        # Generate and display the answer
-        response = multi_agent_query(stock_question)
-        st.session_state.last_question_answer[stock_question] = response
+if 'question_answers_history' not in st.session_state:
+    st.session_state.question_answers_history = {}
 
-st.write("Stock Information App")
+# Streamlit UI
+st.title("Stock Information Assistant")
+st.write("Ask me anything about stocks, market sentiment, or financial insights!")
 
-# Use chat_input without on_submit parameter
-stock_question = st.chat_input("Which stock do you want to know about today?", key="stock_question")
+# Display chat history
+display_chat_history()
+
+# Get user input
+user_query = st.chat_input("Which stock do you want to know about today?", key="stock_question")
 
 # Process the input if it exists
-if stock_question and stock_question.strip():
-    st.write(f"User has sent the following prompt: {stock_question}")
-    process_and_clear(stock_question)
-
-# Display the last question and response if they exist
-if st.session_state.last_question_answer:
-    for question, answer in st.session_state.last_question_answer.items():
-        st.write("Question: ", question)
-        st.write("Answer: ", answer)
+if user_query and user_query.strip():
+    # Display user message
+    st.chat_message("user").write(user_query)
+    
+    # Generate and display the answer
+    with st.chat_message("assistant"):
+        response = multi_agent_query(user_query)
+        st.write(response)

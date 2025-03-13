@@ -13,6 +13,14 @@ from langchain_groq import ChatGroq
 import getpass
 
 import streamlit as st
+from sentence_transformers import SentenceTransformer
+import numpy as np
+import faiss  # For fast similarity search
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import HuggingFaceEmbeddings
+# Add this import at the top with other imports
+from langchain_core.documents import Document
+
 
 
 if "GROQ_API_KEY" not in os.environ:
@@ -23,7 +31,7 @@ if not os.environ.get("TAVILY_API_KEY"):
     os.environ["TAVILY_API_KEY"] = getpass.getpass("Tavily API key:\n")
     
 # Initialize LangChain's ChatGroq Model
-llm = ChatGroq(model="mistral-saba-24b" ,temperature=0.5)
+llm = ChatGroq(temperature=0.5)
 
 #API_KEY = "QYBCUX9XUW8ESTIU35U2M531COX26A02"
 
@@ -174,12 +182,39 @@ async def process_multiple_urls(urls):
 # Function to fetch and return up to 5 search results from Tavily
 @tool("tavily_search_tool", return_direct=False)
 def tavily_search(query: str) -> list:
-    """Fetches search results for a given query using Tavily."""
-    tavily_search = TavilySearchResults(max_results=10, search_depth="advanced",
-    include_answer=True,
-    include_raw_content=True,
-    include_images=True)
-    return tavily_search.run(query)
+    """Enhanced search with RAG processing"""
+    tavily = TavilySearchResults(
+        max_results=5,
+        search_depth="advanced",
+        include_answer=True,
+        include_raw_content=True
+    )
+    results = tavily.run(query)
+    
+# Initialize Sentence-BERT Model for Embedding Generation
+    sbert_model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+# Convert to LangChain Documents
+    documents = [
+        Document(
+            page_content=res["content"],
+            metadata={"source": res["url"], "title": res.get("title", "")}
+        ) for res in results
+    ]
+    
+    # Rest of your RAG processing
+    search_contents = [doc.page_content for doc in documents]
+    query_embedding = sbert_model.encode([query])[0]
+    search_embeddings = sbert_model.encode(search_contents)
+    
+    index = faiss.IndexFlatL2(query_embedding.shape[0])
+    index.add(np.array(search_embeddings))
+    
+    k = 3
+    D, I = index.search(np.array([query_embedding]), k)
+    
+    relevant_docs = [documents[i] for i in I[0]]  # Return Document objects
+    
+    return relevant_docs
 
 # NewsAPI tool to fetch news articles
 @tool("news_api_tool", return_direct=False)
@@ -292,7 +327,7 @@ def create_stock_data_agent(llm):
     return create_tool_calling_agent(llm, tools, prompt)
 
 def create_sentiment_agent(llm):
-    tools = [get_market_sentiment_news, get_news_from_newsapi]
+    tools = [get_market_sentiment_news]
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a sentiment analysis expert. Analyze news sentiment."),
         ("human", "{input}"),
@@ -339,7 +374,7 @@ coordinator_agent = create_coordinator_agent(llm)
 
 # Agent executors
 stock_data_executor = AgentExecutor(agent=stock_data_agent, tools=[get_stock_data, get_stock_analysis], verbose=True)
-sentiment_executor = AgentExecutor(agent=sentiment_agent, tools=[get_market_sentiment_news,get_news_from_newsapi], verbose=True)
+sentiment_executor = AgentExecutor(agent=sentiment_agent, tools=[get_market_sentiment_news], verbose=True)
 insights_executor = AgentExecutor(agent=insights_agent, tools=[tavily_search, process_search_tool], verbose=True)
 general_purpose_executor = AgentExecutor(agent=general_purpose_agent, tools=[tavily_search], verbose=True)
 coordinator_executor = AgentExecutor(agent=coordinator_agent, tools=[], verbose=True)
@@ -404,7 +439,7 @@ def multi_agent_query(query):
             errors.append(f"❌ Sentiment Agent failed: {str(e)}")
             
     # Step 3: Generate insights (generic input)
-    if query_type in ["stock", "sentiment", "both"]:
+    if query_type in ["stock", "sentiment", "both", "general"]:
         try:
             insights_prompt = generate_insights_prompt(query, query_type)
             insights_response = insights_executor.invoke({"input": insights_prompt})
@@ -421,14 +456,15 @@ def multi_agent_query(query):
 
     return final_response
 
-if 'question_answers_history' not in st.session_state:
-    st.session_state.question_answers_history = {}
+
+if 'last_question_answer' not in st.session_state:
+    st.session_state.last_question_answer = {}
 
 def process_and_clear(stock_question):
-    if stock_question and stock_question.strip():
+    if stock_question:
         # Generate and display the answer
         response = multi_agent_query(stock_question)
-        st.session_state.question_answers_history[stock_question] = response
+        st.session_state.last_question_answer[stock_question] = response
 
 st.write("Stock Information App")
 
@@ -441,7 +477,7 @@ if stock_question and stock_question.strip():
     process_and_clear(stock_question)
 
 # Display the last question and response if they exist
-if st.session_state.question_answers_history:
-    for question, answer in st.session_state.question_answers_history.items():
+if st.session_state.last_question_answer:
+    for question, answer in st.session_state.last_question_answer.items():
         st.write("Question: ", question)
         st.write("Answer: ", answer)

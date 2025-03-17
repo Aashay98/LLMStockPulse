@@ -30,7 +30,7 @@ if not os.environ.get("TAVILY_API_KEY"):
     os.environ["TAVILY_API_KEY"] = getpass.getpass("Tavily API key:\n")
     
 # Initialize LangChain's ChatGroq Model
-llm = ChatGroq(temperature=0.5)
+llm = ChatGroq(model="deepseek-r1-distill-llama-70b",temperature=0.5)
 
 #API_KEY = "QYBCUX9XUW8ESTIU35U2M531COX26A02"
 
@@ -176,7 +176,25 @@ async def process_multiple_urls(urls):
     results = await asyncio.gather(*tasks)
     return results
 
-
+# Function to count tokens and trim text if it exceeds the limit
+def trim_text_to_token_limit(text, max_tokens=5900, encoding_name="cl100k_base"):
+    """
+    Trims the text to ensure it does not exceed the specified token limit.
+    
+    Args:
+        text (str): The input text.
+        max_tokens (int): The maximum number of tokens allowed.
+        encoding_name (str): The encoding model to use (e.g., "cl100k_base" for GPT-4).
+    
+    Returns:
+        str: The trimmed text.
+    """
+    encoding = tiktoken.get_encoding(encoding_name)
+    tokens = encoding.encode(text)
+    if len(tokens) > max_tokens:
+        tokens = tokens[:max_tokens]  # Trim to the first `max_tokens` tokens
+        text = encoding.decode(tokens)  # Convert back to text
+    return text
 
 # Function to fetch and return up to 5 search results from Tavily
 @tool("tavily_search_tool", return_direct=False)
@@ -195,7 +213,7 @@ def tavily_search(query: str) -> list:
 # Convert to LangChain Documents
     documents = [
         Document(
-            page_content=res["content"],
+            page_content=trim_text_to_token_limit(res["content"]),
             metadata={"source": res["url"], "title": res.get("title", "")}
         ) for res in results
     ]
@@ -491,7 +509,7 @@ def multi_agent_query(query):
         except Exception as e:
             errors.append(f"❌ Sentiment Agent failed: {str(e)}")
             
-    # Step 3: Generate insights (generic input)
+    # Step 3: Generate insights (generic input)e
     if query_type in ["stock", "sentiment", "both", "general"]:
         try:
             insights_prompt = generate_insights_prompt(query, query_type)

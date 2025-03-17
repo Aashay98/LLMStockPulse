@@ -1,8 +1,7 @@
-from dotenv import load_dotenv
+### Import Necessary LangChain Components
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.prompts import ChatPromptTemplate
-from regex import E
 import requests
 from langchain.tools import tool
 from bs4 import BeautifulSoup
@@ -16,19 +15,26 @@ import streamlit as st
 from sentence_transformers import SentenceTransformer
 import numpy as np
 import faiss  # For fast similarity search
+from langchain_community.vectorstores import FAISS
+from langchain_community.embeddings import HuggingFaceEmbeddings
+# Add this import at the top with other imports
 from langchain_core.documents import Document
-import logging
 
-logging.basicConfig(filename="app.log", level=logging.ERROR)
 
-load_dotenv()  # Load environment variables from .env
 
-ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
-NEWS_API_KEY = os.getenv("NEWS_API_KEY")
-TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+if "GROQ_API_KEY" not in os.environ:
+    os.environ["GROQ_API_KEY"] = getpass.getpass("Enter your Groq API key: ")
+    
+
+if not os.environ.get("TAVILY_API_KEY"):
+    os.environ["TAVILY_API_KEY"] = getpass.getpass("Tavily API key:\n")
     
 # Initialize LangChain's ChatGroq Model
 llm = ChatGroq(temperature=0.5)
+
+#API_KEY = "QYBCUX9XUW8ESTIU35U2M531COX26A02"
+
+API_KEY ="YL41PNDL63AAWZOI"
 
 @tool("stock_api_tool", return_direct=False)
 def get_stock_data(stock_symbol: str, data_type: str = "intraday") -> str:
@@ -43,7 +49,7 @@ def get_stock_data(stock_symbol: str, data_type: str = "intraday") -> str:
     """
    
     BASE_URL = "https://www.alphavantage.co/query"
-    params = {"symbol": stock_symbol, "apikey": ALPHA_VANTAGE_API_KEY}
+    params = {"symbol": stock_symbol, "apikey": API_KEY}
 
     if data_type == "intraday":
         params["function"] = "TIME_SERIES_INTRADAY"
@@ -111,7 +117,7 @@ def get_market_sentiment_news(ticker: str = None, topics: str = None):
 
     params = {
         "function": "NEWS_SENTIMENT",
-        "apikey": ALPHA_VANTAGE_API_KEY
+        "apikey": API_KEY
     }
 
     if ticker:
@@ -215,11 +221,12 @@ def get_news_from_newsapi(query: str) -> str:
     """
     Fetches the latest news articles from NewsAPI for a specific query.
     """
+    API_KEY = "d2afe10169b44e628b2131aed04ac7e4"  # Add your NewsAPI key here
     BASE_URL = "https://newsapi.org/v2/everything"
 
     params = {
         "q": query,  # Use the query from Tavily search
-        "apiKey": NEWS_API_KEY,
+        "apiKey": API_KEY,
         "language": "en",  # You can adjust the language as needed
         "sortBy": "relevance",  # Sort by relevance or any other criteria
     }
@@ -252,7 +259,7 @@ def get_stock_analysis(query: str) -> str:
     
     try:
         # Fetch stock overview (P/E ratio, market cap, dividend yield)
-        overview_url = f"https://www.alphavantage.co/query?function=OVERVIEW&symbol={symbol}&apikey={ALPHA_VANTAGE_API_KEY}"
+        overview_url = f"https://www.alphavantage.co/query?function=OVERVIEW&symbol={symbol}&apikey={API_KEY}"
         stock_data = requests.get(overview_url).json()
 
         if "Error Message" in stock_data or "Note" in stock_data:
@@ -263,7 +270,7 @@ def get_stock_analysis(query: str) -> str:
         dividend_yield = float(stock_data.get("DividendYield", 0))
 
         # Fetch RSI (Relative Strength Index)
-        rsi_url = f"https://www.alphavantage.co/query?function=RSI&symbol={symbol}&interval=daily&time_period=14&series_type=close&apikey={ALPHA_VANTAGE_API_KEY}"
+        rsi_url = f"https://www.alphavantage.co/query?function=RSI&symbol={symbol}&interval=daily&time_period=14&series_type=close&apikey={API_KEY}"
         rsi_data = requests.get(rsi_url).json()
         rsi_values = rsi_data.get("Technical Analysis: RSI", {})
 
@@ -272,12 +279,12 @@ def get_stock_analysis(query: str) -> str:
         rsi_value = float(rsi_values[latest_rsi_date]["RSI"]) if latest_rsi_date else 50  # Default 50 if unavailable
 
         # Fetch latest stock price
-        price_url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={ALPHA_VANTAGE_API_KEY}"
+        price_url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={API_KEY}"
         price_data = requests.get(price_url).json()
         stock_price = float(price_data.get("Global Quote", {}).get("05. price", 0))
 
         # Fetch News Sentiment
-        news_url = f"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers={symbol}&apikey={ALPHA_VANTAGE_API_KEY}"
+        news_url = f"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers={symbol}&apikey={API_KEY}"
         news_response = requests.get(news_url).json()
         news_sentiment = news_response.get("feed", [])
 
@@ -349,6 +356,7 @@ def create_general_purpose_agent(llm):
         ("placeholder", "{agent_scratchpad}"),
     ])
     return create_tool_calling_agent(llm, tools, prompt)
+
 
 # Coordinator agent - Currently not used
 def create_coordinator_agent(llm):
@@ -466,8 +474,6 @@ def multi_agent_query(query):
             )
         except Exception as e:
             errors.append(f"❌ Stock Data Agent failed: {str(e)}")
-        except RuntimeError as e:
-            errors.append("⚠️ Internal module error. Please restart the app or report the issue.")
 
     # Fetch sentiment analysis if it's related to financial sentiment
     if query_type in ["sentiment", "both"]:
@@ -484,8 +490,6 @@ def multi_agent_query(query):
             )
         except Exception as e:
             errors.append(f"❌ Sentiment Agent failed: {str(e)}")
-        except RuntimeError as e:
-            errors.append("⚠️ Internal module error. Please restart the app or report the issue.")
             
     # Step 3: Generate insights (generic input)
     if query_type in ["stock", "sentiment", "both", "general"]:
@@ -503,25 +507,15 @@ def multi_agent_query(query):
             )
         except Exception as e:
             errors.append(f"❌ Insights Agent failed: {str(e)}")
-        except RuntimeError as e:
-            errors.append("⚠️ Internal module error. Please restart the app or report the issue.")
-                
-    if responses:
-        final_response = "\n\n".join(responses)
-        st.session_state.conversation_history.append({"role": "assistant", "content": final_response})
-    else:
-        # If all agents failed, provide a comprehensive error message
-        if len(errors) > 0:
-            logging.error(errors)
-            final_response += "\n\nPlease try:\n"
-            final_response += "1. Checking if you've provided a valid stock ticker symbol\n"
-            final_response += "2. Being more specific about what information you're looking for\n"
-            final_response += "3. Trying again in a few minutes (API rate limits may apply)\n"
-        else:
-            final_response = "I wasn't able to process your query. Please try to rephrase or be more specific about what financial information you're looking for."
-        
-        st.session_state.conversation_history.append({"role": "assistant", "content": final_response})
-   
+
+    # Combine responses
+    final_response = "\n\n".join(responses) if responses else "No data available."
+
+    st.session_state.conversation_history.append({"role": "assistant", "content": final_response})
+
+    # Append errors if any agents failed
+    if errors:
+        final_response += "\n\n**Errors**:\n" + "\n".join(errors)
     return final_response
 
 def display_chat_history():

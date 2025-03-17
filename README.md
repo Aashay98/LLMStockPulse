@@ -67,7 +67,7 @@ cd stock-insight-agent
 2. **Create Vitrual Environment**
 
 ```bash
-python -m venv venv
+python -m venv myvenv
 ```
 Activate for Windows:-
 ```bash

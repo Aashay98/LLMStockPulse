@@ -399,6 +399,16 @@ if "latest_response" not in st.session_state:
 if "last_user_query" not in st.session_state:
     st.session_state.last_user_query = ""
 
+if "hitl_mode" not in st.session_state:
+    st.session_state.hitl_mode = True
+
+if "pending_hitl_response" not in st.session_state:
+    st.session_state.pending_hitl_response = None
+
+if "hitl_log" not in st.session_state:
+    st.session_state.hitl_log = []
+
+
 # Initialize agents (replace `llm` with your actual LLM instance)
 stock_data_agent = create_stock_data_agent(llm)
 sentiment_agent = create_sentiment_agent(llm)
@@ -518,27 +528,63 @@ st.set_page_config(page_title="Stock Assistant", page_icon="📈")
 st.title("📈 Stock Insight Assistant")
 st.markdown("Ask me about a stock’s fundamentals, news sentiment, or technicals. I’m multi-agent powered! 🤖")
 
-# User Input
+# -- Sidebar toggle --
+with st.sidebar:
+    st.session_state.hitl_mode = st.checkbox("🧠 Human-in-the-Loop Review", value=st.session_state.hitl_mode)
+
+# -- HITL approval function with logging --
+def approve_hitl_response(user_query):
+    final_response = st.session_state.hitl_edit_box
+    original_response = st.session_state.pending_hitl_response
+
+    # Log the edit
+    if final_response != original_response:
+        st.session_state.hitl_log.append({
+            "query": user_query,
+            "original_response": original_response,
+            "edited_response": final_response
+        })
+
+    st.session_state.conversation_history.append({"role": "user", "content": user_query})
+    st.session_state.conversation_history.append({"role": "assistant", "content": final_response})
+    st.session_state.latest_response = final_response
+    st.session_state.pending_hitl_response = None
+    st.rerun()
+
+# -- Main input and output display logic with HITL injection --
 user_query = st.chat_input("Which stock do you want to know about today?", key="stock_question")
 
-# Placeholder for response display
 if user_query and user_query.strip():
     st.chat_message("user").write(user_query)
     st.session_state.last_user_query = user_query
 
     with st.chat_message("assistant"):
         with st.spinner("Analyzing your query..."):
-            response = multi_agent_query(user_query)  # Assume this function exists
-            st.session_state.latest_response = response
-            st.session_state.conversation_history.append({"role": "assistant", "content": response})
+            generated_response = multi_agent_query(user_query)
 
-            # Optional: Expandable response sections if response contains split parts
-            if "**Stock Data Analysis**:" in response:
-                with st.expander("📊 Stock Data Analysis"):
-                    st.markdown(response.split("**Stock Data Analysis**:")[1].split("**Sentiment Analysis**:")[0])
-            if "**Sentiment Analysis**:" in response:
-                with st.expander("📰 Sentiment Analysis"):
-                    st.markdown(response.split("**Sentiment Analysis**:")[1].split("**Insights**:")[0])
-            if "**Insights**:" in response:
-                with st.expander("💡 Insights"):
-                    st.markdown(response.split("**Insights**:")[1])
+        if st.session_state.hitl_mode:
+            st.session_state.pending_hitl_response = generated_response
+            st.markdown("#### 💡 Review Assistant's Draft Response:")
+            st.text_area("Edit the response if needed", value=generated_response, key="hitl_edit_box", height=300)
+            st.button("✅ Approve & Send to Chat", on_click=lambda: approve_hitl_response(user_query))
+        else:
+            st.session_state.conversation_history.append({"role": "user", "content": user_query})
+            st.session_state.conversation_history.append({"role": "assistant", "content": generated_response})
+            st.session_state.latest_response = generated_response
+            st.markdown(generated_response)
+
+# -- Show conversation history after response --
+if "conversation_history" in st.session_state:
+    for message in st.session_state.conversation_history:
+        if message["role"] == "user":
+            st.chat_message("user").write(message["content"])
+        else:
+            st.chat_message("assistant").write(message["content"])
+
+# -- debug: view HITL log
+if st.sidebar.checkbox("🔍 View HITL Edit Log"):
+    for entry in st.session_state.hitl_log:
+        st.sidebar.markdown(f"**Query:** {entry['query']}")
+        st.sidebar.markdown(f"**Original:**\n{entry['original_response']}")
+        st.sidebar.markdown(f"**Edited:**\n{entry['edited_response']}")
+        st.sidebar.markdown("---")

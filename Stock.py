@@ -1,55 +1,48 @@
-### Import Necessary LangChain Components
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain_community.tools.tavily_search import TavilySearchResults
-from langchain_core.prompts import ChatPromptTemplate
-import requests
-from langchain.tools import tool
-from bs4 import BeautifulSoup
-import requests
 import asyncio
 import os
-from langchain_groq import ChatGroq
-import getpass
-from langchain.memory import ConversationBufferMemory
-import streamlit as st
-from sentence_transformers import SentenceTransformer
-import numpy as np
+import random
+
 import faiss  # For fast similarity search
-from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
-# Add this import at the top with other imports
+import numpy as np
+import requests
+import streamlit as st
+import tiktoken
+from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain.memory import ConversationBufferMemory
+from langchain.tools import tool
+from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.documents import Document
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_groq import ChatGroq
+from sentence_transformers import SentenceTransformer
 
+from utils import classify_query, generate_insights_prompt
 
+load_dotenv()  # Load environment variables from .env
 
-if "GROQ_API_KEY" not in os.environ:
-    os.environ["GROQ_API_KEY"] = getpass.getpass("Enter your Groq API key: ")
-    
+ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
+NEWS_API_KEY = os.getenv("NEWS_API_KEY")
+TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
-if not os.environ.get("TAVILY_API_KEY"):
-    os.environ["TAVILY_API_KEY"] = getpass.getpass("Tavily API key:\n")
-    
 # Initialize LangChain's ChatGroq Model
-llm = ChatGroq(model="deepseek-r1-distill-llama-70b",temperature=0.5)
-
-#API_KEY = "QYBCUX9XUW8ESTIU35U2M531COX26A02"
-
-API_KEY ="YL41PNDL63AAWZOI"
+llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
 
 @tool("stock_api_tool", return_direct=False)
 def get_stock_data(stock_symbol: str, data_type: str = "intraday") -> str:
     """
     Fetches stock data for a given stock symbol.
-    
+
     Available data_type options:
     - "intraday": Latest stock price (1-minute interval)
     - "daily": Daily adjusted closing prices
     - "fundamental": Company overview (market cap, EPS, PE ratio)
     - "indicators": Technical indicators (RSI, MACD)
     """
-   
+
     BASE_URL = "https://www.alphavantage.co/query"
-    params = {"symbol": stock_symbol, "apikey": API_KEY}
+    params = {"symbol": stock_symbol, "apikey": ALPHA_VANTAGE_API_KEY}
 
     if data_type == "intraday":
         params["function"] = "TIME_SERIES_INTRADAY"
@@ -77,16 +70,16 @@ def get_stock_data(stock_symbol: str, data_type: str = "intraday") -> str:
             latest_timestamp = next(iter(latest_data))
             stock_info = latest_data[latest_timestamp]
             return f"Stock: {stock_symbol} - Open: {stock_info['1. open']}, High: {stock_info['2. high']}, Low: {stock_info['3. low']}, Close: {stock_info['4. close']}, Volume: {stock_info['5. volume']} at {latest_timestamp}"
-        
+
         elif data_type == "daily":
             latest_data = data['Time Series (Daily)']
             latest_date = next(iter(latest_data))
             stock_info = latest_data[latest_date]
             return f"Stock: {stock_symbol} - Open: {stock_info['1. open']}, High: {stock_info['2. high']}, Low: {stock_info['3. low']}, Close: {stock_info['4. close']}, Adjusted Close: {stock_info['5. adjusted close']}, Volume: {stock_info['6. volume']} on {latest_date}"
-        
+
         elif data_type == "fundamental":
             return f"Company: {data['Name']} ({stock_symbol})\nMarket Cap: {data['MarketCapitalization']}\nEPS: {data['EPS']}\nPE Ratio: {data['PERatio']}\nDividend Yield: {data['DividendYield']}\nSector: {data['Sector']}"
-        
+
         elif data_type == "indicators":
             rsi_data = data['Technical Analysis: RSI']
             latest_date = next(iter(rsi_data))
@@ -98,7 +91,7 @@ def get_stock_data(stock_symbol: str, data_type: str = "intraday") -> str:
 
     except KeyError:
         return "Error fetching stock data. Check API limits or verify the stock symbol."
-    
+
 @tool("stock_news_api_tool", return_direct=False)
 def get_market_sentiment_news(ticker: str = None, topics: str = None):
     """
@@ -117,7 +110,7 @@ def get_market_sentiment_news(ticker: str = None, topics: str = None):
 
     params = {
         "function": "NEWS_SENTIMENT",
-        "apikey": API_KEY
+        "apikey": ALPHA_VANTAGE_API_KEY
     }
 
     if ticker:
@@ -158,7 +151,7 @@ def process_search_tool(url: str) -> str:
         response = requests.get(url, headers=headers, timeout=5)
         response.raise_for_status()  # Raise an error for bad status codes
         soup = BeautifulSoup(response.content, "html.parser")
-        
+
         # Extract text from specific tags to avoid noise
         text = " ".join([p.get_text() for p in soup.find_all(["p", "h1", "h2", "h3", "article"])])
         return text
@@ -170,7 +163,7 @@ def process_search_tool(url: str) -> str:
 # Asynchronous function to process multiple URLs concurrently
 async def process_multiple_urls(urls):
     loop = asyncio.get_event_loop()
-    
+
     # Use partial to pass the function and its arguments
     tasks = [loop.run_in_executor(None, partial(process_search_tool, url)) for url in urls]
     results = await asyncio.gather(*tasks)
@@ -180,12 +173,12 @@ async def process_multiple_urls(urls):
 def trim_text_to_token_limit(text, max_tokens=5900, encoding_name="cl100k_base"):
     """
     Trims the text to ensure it does not exceed the specified token limit.
-    
+
     Args:
         text (str): The input text.
         max_tokens (int): The maximum number of tokens allowed.
         encoding_name (str): The encoding model to use (e.g., "cl100k_base" for GPT-4).
-    
+
     Returns:
         str: The trimmed text.
     """
@@ -196,6 +189,10 @@ def trim_text_to_token_limit(text, max_tokens=5900, encoding_name="cl100k_base")
         text = encoding.decode(tokens)  # Convert back to text
     return text
 
+def clean_content(text):
+    text = text.strip().replace('\\n', ' ')
+    return ' '.join(text.split())  # Remove excess whitespace
+
 # Function to fetch and return up to 5 search results from Tavily
 @tool("tavily_search_tool", return_direct=False)
 def tavily_search(query: str) -> list:
@@ -204,12 +201,15 @@ def tavily_search(query: str) -> list:
         max_results=5,
         search_depth="advanced",
         include_answer=True,
-        include_raw_content=True
+        include_raw_content=True,
+        topic = "news",
+        days=30,
+
     )
     results = tavily.run(query)
-    
+
 # Initialize Sentence-BERT Model for Embedding Generation
-    sbert_model = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+    sbert_model = SentenceTransformer('all-MiniLM-L12-v2')
 # Convert to LangChain Documents
     documents = [
         Document(
@@ -217,20 +217,20 @@ def tavily_search(query: str) -> list:
             metadata={"source": res["url"], "title": res.get("title", "")}
         ) for res in results
     ]
-    
+
     # Rest of your RAG processing
-    search_contents = [doc.page_content for doc in documents]
+    search_contents = [clean_content(doc.page_content) for doc in documents]
     query_embedding = sbert_model.encode([query])[0]
     search_embeddings = sbert_model.encode(search_contents)
-    
+
     index = faiss.IndexFlatL2(query_embedding.shape[0])
     index.add(np.array(search_embeddings))
-    
+
     k = 3
     D, I = index.search(np.array([query_embedding]), k)
-    
+
     relevant_docs = [documents[i] for i in I[0]]  # Return Document objects
-    
+
     return relevant_docs
 
 # NewsAPI tool to fetch news articles
@@ -239,12 +239,11 @@ def get_news_from_newsapi(query: str) -> str:
     """
     Fetches the latest news articles from NewsAPI for a specific query.
     """
-    API_KEY = "d2afe10169b44e628b2131aed04ac7e4"  # Add your NewsAPI key here
     BASE_URL = "https://newsapi.org/v2/everything"
 
     params = {
         "q": query,  # Use the query from Tavily search
-        "apiKey": API_KEY,
+        "apiKey": NEWS_API_KEY,
         "language": "en",  # You can adjust the language as needed
         "sortBy": "relevance",  # Sort by relevance or any other criteria
     }
@@ -267,17 +266,17 @@ def get_news_from_newsapi(query: str) -> str:
             return "\n".join(news_summary)
     return "No news articles found."
 
-
+@st.cache_data(ttl=3600)
 @tool("get_stock_analysis_tool", return_direct=False)
 def get_stock_analysis(query: str) -> str:
     """
-    Fetches stock financial data, technical indicators, and news sentiment analysis 
+    Fetches stock financial data, technical indicators, and news sentiment analysis
     for a given stock symbol and provides a Buy/Hold/Sell recommendation.
     """
-    
+
     try:
         # Fetch stock overview (P/E ratio, market cap, dividend yield)
-        overview_url = f"https://www.alphavantage.co/query?function=OVERVIEW&symbol={symbol}&apikey={API_KEY}"
+        overview_url = f"https://www.alphavantage.co/query?function=OVERVIEW&symbol={symbol}&apikey={ALPHA_VANTAGE_API_KEY}"
         stock_data = requests.get(overview_url).json()
 
         if "Error Message" in stock_data or "Note" in stock_data:
@@ -288,7 +287,7 @@ def get_stock_analysis(query: str) -> str:
         dividend_yield = float(stock_data.get("DividendYield", 0))
 
         # Fetch RSI (Relative Strength Index)
-        rsi_url = f"https://www.alphavantage.co/query?function=RSI&symbol={symbol}&interval=daily&time_period=14&series_type=close&apikey={API_KEY}"
+        rsi_url = f"https://www.alphavantage.co/query?function=RSI&symbol={symbol}&interval=daily&time_period=14&series_type=close&apikey={ALPHA_VANTAGE_API_KEY}"
         rsi_data = requests.get(rsi_url).json()
         rsi_values = rsi_data.get("Technical Analysis: RSI", {})
 
@@ -297,12 +296,12 @@ def get_stock_analysis(query: str) -> str:
         rsi_value = float(rsi_values[latest_rsi_date]["RSI"]) if latest_rsi_date else 50  # Default 50 if unavailable
 
         # Fetch latest stock price
-        price_url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={API_KEY}"
+        price_url = f"https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol={symbol}&apikey={ALPHA_VANTAGE_API_KEY}"
         price_data = requests.get(price_url).json()
         stock_price = float(price_data.get("Global Quote", {}).get("05. price", 0))
 
         # Fetch News Sentiment
-        news_url = f"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers={symbol}&apikey={API_KEY}"
+        news_url = f"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers={symbol}&apikey={ALPHA_VANTAGE_API_KEY}"
         news_response = requests.get(news_url).json()
         news_sentiment = news_response.get("feed", [])
 
@@ -323,7 +322,7 @@ def get_stock_analysis(query: str) -> str:
         - **Current Price:** ${stock_price:.2f}
         - **P/E Ratio:** {pe_ratio:.2f}
         - **Market Cap:** ${market_cap:,.0f}
-        - **RSI (14-day):** {rsi_value:.2f}  
+        - **RSI (14-day):** {rsi_value:.2f}
         - **Dividend Yield:** {dividend_yield:.2%}
         - **News Sentiment Score:** {avg_sentiment:.2f}
 
@@ -345,7 +344,7 @@ def create_stock_data_agent(llm):
     return create_tool_calling_agent(llm, tools, prompt)
 
 def create_sentiment_agent(llm):
-    tools = [get_market_sentiment_news]
+    tools = [get_market_sentiment_news, get_news_from_newsapi]
     prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a sentiment analysis expert. Analyze news sentiment."),
         ("placeholder", "{chat_history}"),
@@ -353,7 +352,6 @@ def create_sentiment_agent(llm):
         ("placeholder", "{agent_scratchpad}"),  # Add agent_scratchpad placeholder
     ])
     return create_tool_calling_agent(llm, tools, prompt)
-
 
 def create_insights_agent(llm):
     tools = [tavily_search, process_search_tool]
@@ -375,7 +373,6 @@ def create_general_purpose_agent(llm):
     ])
     return create_tool_calling_agent(llm, tools, prompt)
 
-
 # Coordinator agent - Currently not used
 def create_coordinator_agent(llm):
     tools = []  # No tools needed for the coordinator
@@ -396,6 +393,12 @@ if "insights_memory" not in st.session_state:
 if "general_memory" not in st.session_state:
     st.session_state.general_memory = ConversationBufferMemory(return_messages=True, memory_key="chat_history")
 
+if "latest_response" not in st.session_state:
+    st.session_state.latest_response = ""
+
+if "last_user_query" not in st.session_state:
+    st.session_state.last_user_query = ""
+
 # Initialize agents (replace `llm` with your actual LLM instance)
 stock_data_agent = create_stock_data_agent(llm)
 sentiment_agent = create_sentiment_agent(llm)
@@ -405,72 +408,36 @@ coordinator_agent = create_coordinator_agent(llm)
 
 # Agent executors
 stock_data_executor = AgentExecutor(
-    agent=stock_data_agent, 
+    agent=stock_data_agent,
     tools=[get_stock_data, get_stock_analysis],
-    memory=st.session_state.stock_memory, 
+    memory=st.session_state.stock_memory,
     verbose=True)
 sentiment_executor = AgentExecutor(
-    agent=sentiment_agent, 
-    tools=[get_market_sentiment_news,get_news_from_newsapi], 
+    agent=sentiment_agent,
+    tools=[get_market_sentiment_news,get_news_from_newsapi],
     verbose=True,
     memory=st.session_state.sentiment_memory)
 insights_executor = AgentExecutor(
-    agent=insights_agent, 
-    tools=[tavily_search, process_search_tool], 
+    agent=insights_agent,
+    tools=[tavily_search, process_search_tool],
     verbose=True,
     memory=st.session_state.insights_memory)
 general_purpose_executor = AgentExecutor(
-    agent=general_purpose_agent, 
-    tools=[tavily_search], 
-    verbose=True, 
+    agent=general_purpose_agent,
+    tools=[tavily_search],
+    verbose=True,
     memory=st.session_state.general_memory)
 coordinator_executor = AgentExecutor(agent=coordinator_agent, tools=[], verbose=True)
 
-
-def classify_query(query):
-    """Classifies the query type: stock/finance, sentiment, or general-purpose.
-    Handles cases where the query contains keywords from multiple categories."""
-    stock_keywords = ["stock", "market", "share", "nasdaq", "dow jones", "finance", "investment"]
-    sentiment_keywords = ["sentiment", "news", "social media", "opinion", "trends"]
-    
-    is_stock = any(keyword in query.lower() for keyword in stock_keywords)
-    is_sentiment = any(keyword in query.lower() for keyword in sentiment_keywords)
-    
-    if is_stock and is_sentiment:
-        return "both"  # Handle cases where the query is relevant to both categories
-    elif is_stock:
-        return "stock"
-    elif is_sentiment:
-        return "sentiment"
-    else:
-        return "general"  # Default to Tavily for general queries
-    
-    
-def generate_insights_prompt(query, query_type):
-    """Generates a context-aware prompt for the insights agent based on the query type."""
-    if query_type in ["stock", "both"]:
-        return f"Generate a financial analysis and investment insights for {query}. Consider earnings reports, revenue trends, P/E ratio, and market positioning."
-    elif query_type == "sentiment":
-        return f"Provide insights based on the sentiment analysis for {query}. Summarize key trends, opinions, and potential implications."
-    elif query_type == "general":
-        return f"Provide detailed insights and analysis for {query}. Consider relevant facts, trends, and context."
-    else:
-        return f"Provide insights and analysis for {query}."
-
-        
 def multi_agent_query(query):
-    # Update conversation history
-    if "conversation_history" not in st.session_state:
-        st.session_state.conversation_history = []
-    
     # Add the user query to conversation history
-    st.session_state.conversation_history.append({"role": "user", "content": query})    
-    
+    st.session_state.conversation_history.append({"role": "user", "content": query})
+
     responses = []
     errors = []
     query_type = classify_query(query)
     print(query_type)
-    
+
     context = ""
     if len(st.session_state.conversation_history) > 1:
         previous_exchanges = st.session_state.conversation_history[-5:-1]  # Get up to 4 previous exchanges
@@ -487,7 +454,7 @@ def multi_agent_query(query):
             })
             responses.append(f"**Stock Data Analysis**:\n{stock_data_response['output']}")
             st.session_state.stock_memory.save_context(
-                {"input": query}, 
+                {"input": query},
                 {"output": stock_data_response['output']}
             )
         except Exception as e:
@@ -496,19 +463,19 @@ def multi_agent_query(query):
     # Fetch sentiment analysis if it's related to financial sentiment
     if query_type in ["sentiment", "both"]:
         try:
-            sentiment_response = sentiment_executor.invoke({   
+            sentiment_response = sentiment_executor.invoke({
                 "chat_history": st.session_state.sentiment_memory.load_memory_variables({})["chat_history"],
                 "input": f"Analyze the market sentiment for {query}. Summarize the tone of recent news articles, social media discussions, and investor opinions."
             })
             responses.append(f"**Sentiment Analysis**:\n{sentiment_response['output']}")
             # Save to memory
             st.session_state.sentiment_memory.save_context(
-                {"input": query}, 
+                {"input": query},
                 {"output": sentiment_response['output']}
             )
         except Exception as e:
             errors.append(f"❌ Sentiment Agent failed: {str(e)}")
-            
+
     # Step 3: Generate insights (generic input)e
     if query_type in ["stock", "sentiment", "both", "general"]:
         try:
@@ -520,7 +487,7 @@ def multi_agent_query(query):
             responses.append(f"**Insights**:\n{insights_response['output']}")
             # Save to memory
             st.session_state.insights_memory.save_context(
-                {"input": insights_prompt}, 
+                {"input": insights_prompt},
                 {"output": insights_response['output']}
             )
         except Exception as e:
@@ -528,8 +495,6 @@ def multi_agent_query(query):
 
     # Combine responses
     final_response = "\n\n".join(responses) if responses else "No data available."
-
-    st.session_state.conversation_history.append({"role": "assistant", "content": final_response})
 
     # Append errors if any agents failed
     if errors:
@@ -548,25 +513,32 @@ def display_chat_history():
 if 'conversation_history' not in st.session_state:
     st.session_state.conversation_history = []
 
-if 'question_answers_history' not in st.session_state:
-    st.session_state.question_answers_history = {}
-
 # Streamlit UI
-st.title("Stock Information Assistant")
-st.write("Ask me anything about stocks, market sentiment, or financial insights!")
+st.set_page_config(page_title="Stock Assistant", page_icon="📈")
+st.title("📈 Stock Insight Assistant")
+st.markdown("Ask me about a stock’s fundamentals, news sentiment, or technicals. I’m multi-agent powered! 🤖")
 
-# Display chat history
-display_chat_history()
-
-# Get user input
+# User Input
 user_query = st.chat_input("Which stock do you want to know about today?", key="stock_question")
 
-# Process the input if it exists
+# Placeholder for response display
 if user_query and user_query.strip():
-    # Display user message
     st.chat_message("user").write(user_query)
-    
-    # Generate and display the answer
+    st.session_state.last_user_query = user_query
+
     with st.chat_message("assistant"):
-        response = multi_agent_query(user_query)
-        st.write(response)
+        with st.spinner("Analyzing your query..."):
+            response = multi_agent_query(user_query)  # Assume this function exists
+            st.session_state.latest_response = response
+            st.session_state.conversation_history.append({"role": "assistant", "content": response})
+
+            # Optional: Expandable response sections if response contains split parts
+            if "**Stock Data Analysis**:" in response:
+                with st.expander("📊 Stock Data Analysis"):
+                    st.markdown(response.split("**Stock Data Analysis**:")[1].split("**Sentiment Analysis**:")[0])
+            if "**Sentiment Analysis**:" in response:
+                with st.expander("📰 Sentiment Analysis"):
+                    st.markdown(response.split("**Sentiment Analysis**:")[1].split("**Insights**:")[0])
+            if "**Insights**:" in response:
+                with st.expander("💡 Insights"):
+                    st.markdown(response.split("**Insights**:")[1])

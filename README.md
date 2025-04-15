@@ -1,45 +1,58 @@
 # 📊 Stock Insight Multi-Agent App
 
-This project is an intelligent, multi-agent financial assistant that brings together the power of **LLMs**, **LangChain**, **Streamlit**, and real-time APIs to provide rich, insightful answers to your stock market–related questions.
+An intelligent financial assistant that combines **LLMs**, **LangChain**, **Streamlit**, and powerful real-time APIs to deliver actionable stock insights. This multi-agent app acts like a **personal stock analyst**, capable of understanding financial queries, routing them to specialized agents, and responding with structured, up-to-date insights.
 
-At its core, this app is designed to **understand your query**, **route it to the most suitable AI agent**, and **respond with well-structured data, news sentiment, and actionable insights**.
+Whether you're an investor, analyst, or market enthusiast, this app simplifies research and decision-making by blending:
+
+- 🔍 **Live financial data**
+- 🧠 **AI-driven analysis**
+- 💬 **Conversational interface**
 
 Whether you're an investor, a financial researcher, or just curious about market trends, this app acts like a **personal stock analyst**, combining:
 
-- 🔍 **Live data** from financial APIs  
-- 🧠 **AI-powered analysis and decision-making**  
-- 💬 **Conversational interface for easy interaction**  
+## 💼 What It Can Do
 
-The app can:
 - Track **real-time stock prices** (intraday & daily)
-- Analyze **technical indicators** like RSI
-- Retrieve **company financial fundamentals**
-- Detect **market sentiment** through recent news
+- Retrieve **fundamentals** and **financial statements**
+- Analyze **technical indicators** (like RSI)
+- Generate **buy/hold/sell** recommendations
+- Detect **market sentiment** from news sources
+- Extract **insights from the web**
+- Handle **complex financial queries** through agent collaboration
+
 ---
 
 ## 🚀 Features
 
-- 📈 **Stock Data Fetching**  
-  Get up-to-date intraday prices, daily history, technical indicators (like RSI), and financial fundamentals using Alpha Vantage.
+### 📈 Stock Data & Analysis
+- Intraday prices, daily trends, and company fundamentals via **Alpha Vantage**
+- RSI and MACD indicators for technical analysis
+- Financial reports like **income statements**
+- Agent-powered **buy/hold/sell** logic based on P/E, RSI, and sentiment
 
-- 📰 **Market Sentiment & News**  
-  Uses Alpha Vantage and NewsAPI to find the most recent and relevant news, and analyze sentiment for individual tickers or market topics.
+### 📰 Sentiment Analysis
+- Recent news headlines and sentiment via **Alpha Vantage** and **NewsAPI**
+- Summary of tone and implications from financial media
 
-- 🔎 **Web & Document Insight Extraction**  
-  Search results and content processing are powered by Tavily and BeautifulSoup, allowing you to extract key facts from webpages.
+### 🌐 Insights & RAG
+- Web search using **Tavily API**
+- Content extraction using **BeautifulSoup**
+- Embedded similarity search with **FAISS** and **Sentence-BERT**
+- Retrieve top web insights and summarize them intelligently
 
-- 🤖 **Multi-Agent Architecture**  
-  The app features multiple LangChain agents with different specializations:
-  - **Stock Data Agent**: Fetches and interprets financial data
-  - **Sentiment Agent**: Analyzes sentiment and media trends
-  - **Insights Agent**: Synthesizes deeper insights using search tools
-  - **General-Purpose Agent**: Handles any broad or unrelated queries
+### 🤖 Multi-Agent LLM System
+Specialized agents using **LangChain Tool Calling**:
+- `Stock Data Agent`: Prices, indicators, fundamentals, recommendations
+- `Sentiment Agent`: News sentiment and trends
+- `Insights Agent`: Web search and summarization
+- `General Agent`: Handles any query using Tavily search
 
-- 🧠 **Query Classification System**  
-  Automatically identifies what type of question you’re asking (stock, sentiment, or general) and assigns it to the appropriate agent.
-
-- 🌐 **Streamlit Web Interface**  
-  Chat-based interface makes it easy to ask questions like “What’s the outlook for Apple stock?” and get rich, AI-powered answers instantly.
+### 🧠 Smart Query Classification
+Automatically detects whether your query is:
+- Stock-specific
+- Sentiment-oriented
+- General (or multiple)
+Routes it to the right agents for a coordinated response.
 
 ---
 
@@ -50,52 +63,49 @@ The app can:
 - [Alpha Vantage API](https://www.alphavantage.co/)
 - [NewsAPI](https://newsapi.org/)
 - [Tavily Search API](https://docs.tavily.com/)
-- [Groq (Mistral Model)](https://groq.com/)
-- Python, asyncio, BeautifulSoup
+- [Groq](https://groq.com/) (uses `Mistral`)
+- [BeautifulSoup](https://pypi.org/project/beautifulsoup4/)
+- [Sentence-Transformers](https://www.sbert.net/)
+- [FAISS](https://faiss.ai/)
+- Python `asyncio`, `os`, `requests`
 
 ---
 
-## 🔑 Setup & Installation
+## 🔧 Setup & Installation
 
-1. **Clone the Repository**
-
+### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-username/stock-insight-agent.git
-cd stock-insight-agent
+git clone https://github.com/Aashay98/LLMStockPulse-main.git
+cd LLMStockPulse-main
 ```
 
-2. **Create Vitrual Environment**
-
+### 2. Create and Activate a Virtual Environment
 ```bash
-python -m venv myvenv
+python -m venv venv
 ```
-Activate for Windows:-
+Windows:
 ```bash
 venv\Scripts\activate
 ```
-Activate for Linux/MacOS:-
+Linux/macOS:
 ```bash
 source venv/bin/activate
 ```
 
-3. **Install Dependencies**
-
+### 3. Install Dependencies
 ```bash
 pip install -r requirements.txt
 ```
 
-4. **Set Environment Variables**
-
-You will be prompted for API keys at runtime, but you can also set them manually:
-
+### 4. Set Environment Variables
+You’ll be prompted at runtime, or you can set them manually:
 ```bash
 export GROQ_API_KEY="your_groq_api_key"
 export TAVILY_API_KEY="your_tavily_api_key"
 export NEWS_API_KEY="your_newsapi_key"
 export ALPHA_VANTAGE_API_KEY="your_alpha_vantage_key"
 ```
-
-Or use `.env` and `python-dotenv` if preferred.
+Or use a `.env` file with `python-dotenv`.
 
 ---
 
@@ -105,21 +115,21 @@ Or use `.env` and `python-dotenv` if preferred.
 python -m streamlit run Stock.py
 ```
 
-This will launch a browser window where you can start chatting with the AI about stocks, news sentiment, and more.
+This will launch a browser window with a chatbot interface for asking financial questions.
 
 ---
 
-## 💡 Example Questions
+## 💬 Example Questions
 
-- `"What is the latest on Tesla stock?"`  
-- `"Analyze the sentiment for Apple stock."`  
-- `"Should I buy Google shares based on recent data?"`  
-- `"What are the top tech stock trends today?"`
+- `"Analyze Tesla stock and provide a recommendation."`
+- `"What is the sentiment around Nvidia this week?"`
+- `"Give me the latest financials of Apple."`
+- `"Should I invest in Google based on current metrics?"`
+- `"What's the market outlook for the semiconductor sector?"`
 
 ---
 
-## 📌 Notes
-
+## ⚠️ Notes
 - Make sure your API keys are active and within rate limits.
 - Tavily and Alpha Vantage have limited free-tier usage.
 - This app uses **Groq's Mistral model** via LangChain for better performance and speed.
@@ -129,5 +139,3 @@ This will launch a browser window where you can start chatting with the AI about
 ## 📄 License
 
 MIT License
-
----

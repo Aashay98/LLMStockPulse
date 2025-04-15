@@ -8,7 +8,21 @@ Whether you're an investor, analyst, or market enthusiast, this app simplifies r
 - 🧠 **AI-driven analysis**
 - 💬 **Conversational interface**
 
-Whether you're an investor, a financial researcher, or just curious about market trends, this app acts like a **personal stock analyst**, combining:
+---
+
+## 🧠 Concepts Used
+
+This project demonstrates practical application of several modern AI, NLP, and full-stack engineering concepts:
+
+- **Multi-Agent Architecture**: Specialized agents coordinate via LangChain to handle different task types (e.g., stock data, sentiment, RAG insights)
+- **Tool Calling via LangChain**: LLMs interact with Python tools using LangChain's structured output & tool calling APIs
+- **Human-in-the-Loop (HITL)**: Integrated editing and approval interface for user-reviewed model outputs
+- **Retrieval-Augmented Generation (RAG)**: External knowledge is pulled using Tavily + FAISS + Sentence-BERT to enhance LLM context
+- **Token Management**: Long input content is trimmed and encoded using `tiktoken` to fit LLM input limits
+- **Caching & Performance**: `@st.cache_data` caches API responses and reduces latency for repeated queries
+- **UI/UX with Streamlit**: Interactive UI replicating ChatGPT behavior using `st.chat_input`, expandable sections, and real-time edits
+
+---
 
 ## 💼 What It Can Do
 
@@ -63,7 +77,7 @@ Routes it to the right agents for a coordinated response.
 - [Alpha Vantage API](https://www.alphavantage.co/)
 - [NewsAPI](https://newsapi.org/)
 - [Tavily Search API](https://docs.tavily.com/)
-- [Groq](https://groq.com/) (uses `Mistral`)
+- [Groq](https://groq.com/) (uses `Llama`)
 - [BeautifulSoup](https://pypi.org/project/beautifulsoup4/)
 - [Sentence-Transformers](https://www.sbert.net/)
 - [FAISS](https://faiss.ai/)
@@ -121,21 +135,22 @@ This will launch a browser window with a chatbot interface for asking financial 
 
 ## 💬 Example Questions
 
-- `"Analyze Tesla stock and provide a recommendation."`
-- `"What is the sentiment around Nvidia this week?"`
-- `"Give me the latest financials of Apple."`
-- `"Should I invest in Google based on current metrics?"`
-- `"What's the market outlook for the semiconductor sector?"`
+- "Analyze Tesla stock and provide a recommendation."
+- "What is the sentiment around Nvidia this week?"
+- "Give me the latest financials of Apple."
+- "Should I invest in Google based on current metrics?"
+- "What's the market outlook for the semiconductor sector?"
 
 ---
 
 ## ⚠️ Notes
 - Make sure your API keys are active and within rate limits.
 - Tavily and Alpha Vantage have limited free-tier usage.
-- This app uses **Groq's Mistral model** via LangChain for better performance and speed.
+- This app uses **Groq's llama model** via LangChain for better performance and speed.
 
 ---
 
 ## 📄 License
 
 MIT License
+

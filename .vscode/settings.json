@@ -1,0 +1,19 @@
+{
+
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+        },
+    },
+    "breadcrumbs.enabled": true,
+    "editor.fontSize": 12,
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true,
+    "editor.mouseWheelZoom": true,
+    "git.mergeEditor": true,
+    "workbench.editor.enablePreview": false,
+    "editor.tabSize": 4,
+    "python.languageServer": "Pylance",
+
+}

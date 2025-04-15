@@ -1,3 +1,10 @@
+import asyncio
+
+import tiktoken
+
+from tools import process_search_tool
+
+
 def generate_suggestions_from_topic(topic):
     topic = topic.lower()
     suggestions = []
@@ -55,3 +62,36 @@ def classify_query(query):
         return "sentiment"
     else:
         return "general"  # Default to Tavily for general queries
+
+# Asynchronous function to process multiple URLs concurrently
+async def process_multiple_urls(urls):
+    loop = asyncio.get_event_loop()
+
+    # Use partial to pass the function and its arguments
+    tasks = [loop.run_in_executor(None, partial(process_search_tool, url)) for url in urls]
+    results = await asyncio.gather(*tasks)
+    return results
+
+# Function to count tokens and trim text if it exceeds the limit
+def trim_text_to_token_limit(text, max_tokens=5900, encoding_name="cl100k_base"):
+    """
+    Trims the text to ensure it does not exceed the specified token limit.
+
+    Args:
+        text (str): The input text.
+        max_tokens (int): The maximum number of tokens allowed.
+        encoding_name (str): The encoding model to use (e.g., "cl100k_base" for GPT-4).
+
+    Returns:
+        str: The trimmed text.
+    """
+    encoding = tiktoken.get_encoding(encoding_name)
+    tokens = encoding.encode(text)
+    if len(tokens) > max_tokens:
+        tokens = tokens[:max_tokens]  # Trim to the first `max_tokens` tokens
+        text = encoding.decode(tokens)  # Convert back to text
+    return text
+
+def clean_content(text):
+    text = text.strip().replace('\\n', ' ')
+    return ' '.join(text.split())  # Remove excess whitespace

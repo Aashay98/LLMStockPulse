@@ -1,34 +1,33 @@
-import asyncio
-
 import tiktoken
-
-from tools import process_search_tool
 
 
 def generate_suggestions_from_topic(topic):
     topic = topic.lower()
     suggestions = []
 
-    if any(keyword in topic for keyword in ["stock", "price", "market", "nasdaq", "dow", "s&p"]):
+    if any(
+        keyword in topic
+        for keyword in ["stock", "price", "market", "nasdaq", "dow", "s&p"]
+    ):
         suggestions = [
             "Compare this stock with MSFT or AAPL",
             "What is the earnings trend for this stock?",
             "Show recent insider trading activity",
-            "What's the long-term outlook?"
+            "What's the long-term outlook?",
         ]
     elif any(keyword in topic for keyword in ["sentiment", "news", "opinion", "trend"]):
         suggestions = [
             "Summarize recent analyst opinions",
             "What’s the social media sentiment?",
             "Any upcoming events that could shift sentiment?",
-            "Compare this sentiment to last month"
+            "Compare this sentiment to last month",
         ]
     else:
         suggestions = [
             "Can you go deeper into this topic?",
             "What are the key risks involved?",
             "Give a beginner summary",
-            "What are related stocks to watch?"
+            "What are related stocks to watch?",
         ]
 
     return suggestions
@@ -45,10 +44,19 @@ def generate_insights_prompt(query, query_type):
     else:
         return f"Provide insights and analysis for {query}."
 
+
 def classify_query(query):
     """Classifies the query type: stock/finance, sentiment, or general-purpose.
     Handles cases where the query contains keywords from multiple categories."""
-    stock_keywords = ["stock", "market", "share", "nasdaq", "dow jones", "finance", "investment"]
+    stock_keywords = [
+        "stock",
+        "market",
+        "share",
+        "nasdaq",
+        "dow jones",
+        "finance",
+        "investment",
+    ]
     sentiment_keywords = ["sentiment", "news", "social media", "opinion", "trends"]
 
     is_stock = any(keyword in query.lower() for keyword in stock_keywords)
@@ -63,14 +71,6 @@ def classify_query(query):
     else:
         return "general"  # Default to Tavily for general queries
 
-# Asynchronous function to process multiple URLs concurrently
-async def process_multiple_urls(urls):
-    loop = asyncio.get_event_loop()
-
-    # Use partial to pass the function and its arguments
-    tasks = [loop.run_in_executor(None, partial(process_search_tool, url)) for url in urls]
-    results = await asyncio.gather(*tasks)
-    return results
 
 # Function to count tokens and trim text if it exceeds the limit
 def trim_text_to_token_limit(text, max_tokens=5900, encoding_name="cl100k_base"):
@@ -92,6 +92,7 @@ def trim_text_to_token_limit(text, max_tokens=5900, encoding_name="cl100k_base")
         text = encoding.decode(tokens)  # Convert back to text
     return text
 
+
 def clean_content(text):
-    text = text.strip().replace('\\n', ' ')
-    return ' '.join(text.split())  # Remove excess whitespace
+    text = text.strip().replace("\\n", " ")
+    return " ".join(text.split())  # Remove excess whitespace

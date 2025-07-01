@@ -139,7 +139,7 @@ def multi_agent_query(query):
             insights_prompt = generate_insights_prompt(query, query_type)
             insights_response = insights_executor.invoke(
                 {
-                    "chat_history": st.session_state.sentiment_memory.load_memory_variables(
+                    "chat_history": st.session_state.insights_memory.load_memory_variables(
                         {}
                     )[
                         "chat_history"

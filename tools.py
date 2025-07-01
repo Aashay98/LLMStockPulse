@@ -232,10 +232,11 @@ def get_news_from_newsapi(query: str) -> str:
 
 
 @tool("get_stock_analysis_tool", return_direct=False)
-def get_stock_analysis(query: str) -> str:
-    """
-    Fetches stock financial data, technical indicators, and news sentiment analysis
-    for a given stock symbol and provides a Buy/Hold/Sell recommendation.
+def get_stock_analysis(symbol: str) -> str:
+    """Return a brief buy/hold/sell analysis for ``symbol``.
+
+    Args:
+        symbol: Stock ticker symbol.
     """
 
     try:

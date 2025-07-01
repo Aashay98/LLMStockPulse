@@ -126,7 +126,7 @@ Or use a `.env` file with `python-dotenv`.
 ## ▶️ How to Run
 
 ```bash
-python -m streamlit run Stock.py
+python -m streamlit run app.py
 ```
 
 This will launch a browser window with a chatbot interface for asking financial questions.

@@ -9,7 +9,7 @@ from utils import classify_query, generate_insights_prompt
 # Initialize LangChain's ChatGroq Model
 llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
 
-# initialize memories for each agents
+# initialize memory for each agent
 if "stock_memory" not in st.session_state:
     st.session_state.stock_memory = ConversationBufferMemory(
         return_messages=True, memory_key="chat_history"
@@ -26,7 +26,7 @@ if "insights_memory" not in st.session_state:
 #     st.session_state.general_memory = ConversationBufferMemory(
 #         return_messages=True, memory_key="chat_history"
 #     )
-# initialize memories for each agents
+# initialize memory for each agent
 if "latest_response" not in st.session_state:
     st.session_state.latest_response = ""
 if "last_user_query" not in st.session_state:

@@ -1,5 +1,7 @@
 from langchain.agents import create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate
+from typing import List
+from langchain.tools import BaseTool
 
 from tools import (
     get_market_sentiment_news,
@@ -10,74 +12,106 @@ from tools import (
     tavily_search,
 )
 
+def create_enhanced_prompt(system_message: str, include_context: bool = True) -> ChatPromptTemplate:
+    """Create enhanced prompt template with better context handling."""
+    messages = [("system", system_message)]
+    
+    if include_context:
+        messages.append(("placeholder", "{chat_history}"))
+    
+    messages.extend([
+        ("human", "{input}"),
+        ("placeholder", "{agent_scratchpad}"),
+    ])
+    
+    return ChatPromptTemplate.from_messages(messages)
 
-# Define specialized agents
 def create_stock_data_agent(llm):
+    """Create specialized stock data agent with enhanced capabilities."""
     tools = [get_stock_data, get_stock_analysis]
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", "You are a stock data expert. Fetch and analyze stock data."),
-            ("placeholder", "{chat_history}"),
-            ("human", "{input}"),
-            ("placeholder", "{agent_scratchpad}"),  # Add agent_scratchpad placeholder
-        ]
-    )
-    return create_tool_calling_agent(llm, tools, prompt)
+    
+    system_message = """You are a professional stock data analyst with expertise in financial markets.
 
+Your responsibilities:
+- Fetch and analyze real-time stock data including prices, volumes, and technical indicators
+- Provide comprehensive fundamental analysis including P/E ratios, market cap, and financial metrics
+- Generate actionable investment insights based on quantitative data
+- Explain technical indicators in simple terms for users
+
+Always provide specific, data-driven responses with proper context and disclaimers about investment risks."""
+
+    prompt = create_enhanced_prompt(system_message)
+    return create_tool_calling_agent(llm, tools, prompt)
 
 def create_sentiment_agent(llm):
+    """Create specialized sentiment analysis agent."""
     tools = [get_market_sentiment_news, get_news_from_newsapi]
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", "You are a sentiment analysis expert. Analyze news sentiment."),
-            ("placeholder", "{chat_history}"),
-            ("human", "{input}"),
-            ("placeholder", "{agent_scratchpad}"),  # Add agent_scratchpad placeholder
-        ]
-    )
-    return create_tool_calling_agent(llm, tools, prompt)
+    
+    system_message = """You are a market sentiment specialist focused on news analysis and market psychology.
 
+Your responsibilities:
+- Analyze news sentiment and its potential market impact
+- Identify trending topics and market narratives
+- Assess the reliability and bias of news sources
+- Correlate sentiment trends with potential price movements
+
+Provide balanced analysis that considers both positive and negative sentiment factors."""
+
+    prompt = create_enhanced_prompt(system_message)
+    return create_tool_calling_agent(llm, tools, prompt)
 
 def create_insights_agent(llm):
+    """Create specialized insights generation agent."""
     tools = [tavily_search, process_search_tool]
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", "You are an insights generator. Provide detailed insights."),
-            ("placeholder", "{chat_history}"),
-            ("human", "{input}"),
-            ("placeholder", "{agent_scratchpad}"),  # Add agent_scratchpad placeholder
-        ]
-    )
-    return create_tool_calling_agent(llm, tools, prompt)
+    
+    system_message = """You are a financial research specialist who generates comprehensive market insights.
 
+Your responsibilities:
+- Conduct thorough research using web sources and financial databases
+- Synthesize information from multiple sources to provide holistic views
+- Identify market trends, opportunities, and risks
+- Provide actionable insights for investment decision-making
+
+Focus on delivering well-researched, balanced perspectives that help users make informed decisions."""
+
+    prompt = create_enhanced_prompt(system_message)
+    return create_tool_calling_agent(llm, tools, prompt)
 
 def create_general_purpose_agent(llm):
-    tools = [tavily_search]  # General-purpose tool like Tavily
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                "You are a general-purpose assistant. Answer any query comprehensively.",
-            ),
-            ("placeholder", "{chat_history}"),
-            ("human", "{input}"),
-            ("placeholder", "{agent_scratchpad}"),
-        ]
-    )
+    """Create general-purpose financial assistant."""
+    tools = [tavily_search]
+    
+    system_message = """You are a knowledgeable financial assistant capable of handling diverse queries.
+
+Your responsibilities:
+- Answer general financial and investment questions
+- Provide educational content about markets and investing
+- Help users understand financial concepts and terminology
+- Offer guidance on investment strategies and portfolio management
+
+Always prioritize accuracy and provide educational value in your responses."""
+
+    prompt = create_enhanced_prompt(system_message)
     return create_tool_calling_agent(llm, tools, prompt)
 
-
-# Coordinator agent - Currently not used
 def create_coordinator_agent(llm):
-    tools = []  # No tools needed for the coordinator
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                "You are the coordinator. Manage interactions between agents and combine their responses.",
-            ),
-            ("human", "{input}"),
-            ("placeholder", "{agent_scratchpad}"),  # Add agent_scratchpad placeholder
-        ]
-    )
+    """Create coordinator agent for managing multi-agent interactions."""
+    tools = []
+    
+    system_message = """You are an intelligent coordinator that manages interactions between specialized financial agents.
+
+Your responsibilities:
+- Analyze user queries to determine which agents should be involved
+- Coordinate responses from multiple agents
+- Synthesize information from different sources into coherent insights
+- Ensure comprehensive coverage of user requests
+
+Focus on providing well-structured, comprehensive responses that leverage the strengths of each specialized agent."""
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", system_message),
+        ("human", "{input}"),
+        ("placeholder", "{agent_scratchpad}"),
+    ])
+    
     return create_tool_calling_agent(llm, tools, prompt)

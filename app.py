@@ -1,19 +1,23 @@
 import logging
 from typing import Dict
+
 import streamlit as st
+import torch
 from langchain.agents import AgentExecutor
 from langchain.memory import ConversationBufferMemory
 from langchain_groq import ChatGroq
-import torch
+
 from agents import *
 from config import GROQ_API_KEY
+from exceptions import StockAppException
+from storage import append_history, clear_history, load_history
 from utils import classify_query, generate_insights_prompt
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-torch.classes.__path__ = [] # add this line to manually set it to empty.
+torch.classes.__path__ = []  # add this line to manually set it to empty.
 
 # Page configuration
 st.set_page_config(
@@ -104,6 +108,10 @@ def initialize_session_state():
     for key, default_value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = default_value
+
+    # Load persistent conversation history if available
+    if not st.session_state["conversation_history"]:
+        st.session_state["conversation_history"] = load_history()
 
     # Initialize memories for each agent
     memory_keys = [
@@ -325,6 +333,14 @@ def approve_hitl_response(user_query: str):
             ]
         )
 
+        # Persist to storage
+        append_history(
+            [
+                {"role": "user", "content": user_query},
+                {"role": "assistant", "content": final_response},
+            ]
+        )
+
         st.session_state.latest_response = final_response
         st.session_state.pending_hitl_response = None
 
@@ -366,6 +382,7 @@ def display_sidebar():
             st.session_state.latest_response = ""
             st.session_state.last_user_query = ""
             st.session_state.total_queries = 0
+            clear_history()
             st.success("Conversation history cleared!")
 
         # HITL log viewer

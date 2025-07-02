@@ -1,8 +1,10 @@
 import os
+
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
 
 # API Keys with validation
 ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
@@ -20,7 +22,9 @@ REQUIRED_KEYS = {
 
 missing_keys = [key for key, value in REQUIRED_KEYS.items() if not value]
 if missing_keys:
-    raise ValueError(f"Missing required environment variables: {', '.join(missing_keys)}")
+    raise ValueError(
+        f"Missing required environment variables: {', '.join(missing_keys)}"
+    )
 
 # API Configuration
 ALPHA_VANTAGE_BASE_URL = "https://www.alphavantage.co/query"

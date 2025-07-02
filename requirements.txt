@@ -8,7 +8,6 @@ bs4==0.0.2
 cachetools==5.5.2
 certifi==2025.1.31
 charset-normalizer==3.4.1
-click==8.1.84
 colorama==0.4.6
 dataclasses-json==0.6.7
 distro==1.9.0

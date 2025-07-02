@@ -9,6 +9,7 @@ from agents import *
 from utils import classify_query, generate_insights_prompt
 from exceptions import StockAppException
 from config import GROQ_API_KEY
+from storage import load_history, append_history, clear_history
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -99,6 +100,10 @@ def initialize_session_state():
     for key, default_value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = default_value
+
+    # Load persistent conversation history if available
+    if not st.session_state['conversation_history']:
+        st.session_state['conversation_history'] = load_history()
     
     # Initialize memories for each agent
     memory_keys = ['stock_memory', 'sentiment_memory', 'insights_memory', 'general_memory']
@@ -295,6 +300,12 @@ def approve_hitl_response(user_query: str):
             {"role": "user", "content": user_query},
             {"role": "assistant", "content": final_response}
         ])
+
+        # Persist to storage
+        append_history([
+            {"role": "user", "content": user_query},
+            {"role": "assistant", "content": final_response}
+        ])
         
         st.session_state.latest_response = final_response
         st.session_state.pending_hitl_response = None
@@ -335,6 +346,7 @@ def display_sidebar():
             st.session_state.conversation_history = []
             st.session_state.latest_response = ""
             st.session_state.last_user_query = ""
+            clear_history()
             st.success("Conversation history cleared!")
         
         # HITL log viewer

@@ -56,7 +56,7 @@ An intelligent financial assistant that combines **LLMs**, **LangChain**, **Stre
 - **APIs**: Alpha Vantage, NewsAPI, Tavily Search
 - **ML**: Sentence Transformers, FAISS for similarity search
 - **Data**: BeautifulSoup for web scraping
-- **Storage**: In-memory conversation management
+- **Storage**: JSON-based persistent conversation history
 
 ## 🔧 Setup & Installation
 
@@ -124,6 +124,7 @@ streamlit run app.py
 - Review AI responses before they're added to conversation
 - Edit and improve responses for accuracy
 - Track editing history and patterns
+- Conversation history persisted on disk (cleared via sidebar button)
 - Toggle between automatic and review modes
 
 ### Multi-Agent Coordination

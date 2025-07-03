@@ -74,6 +74,7 @@ def initialize_agents(_llm):
         agents = {
             'stock_data': create_stock_data_agent(_llm),
             'sentiment': create_sentiment_agent(_llm),
+            'social_sentiment': create_social_sentiment_agent(_llm),
             'insights': create_insights_agent(_llm),
             'general': create_general_purpose_agent(_llm),
             'coordinator': create_coordinator_agent(_llm)
@@ -101,7 +102,7 @@ def initialize_session_state():
             st.session_state[key] = default_value
     
     # Initialize memories for each agent
-    memory_keys = ['stock_memory', 'sentiment_memory', 'insights_memory', 'general_memory']
+    memory_keys = ['stock_memory', 'sentiment_memory', 'social_memory', 'insights_memory', 'general_memory']
     for memory_key in memory_keys:
         if memory_key not in st.session_state:
             st.session_state[memory_key] = ConversationBufferMemory(
@@ -112,8 +113,9 @@ def initialize_session_state():
 def create_agent_executors(agents: Dict, memories: Dict) -> Dict[str, AgentExecutor]:
     """Create agent executors with proper tool assignments."""
     from tools import (
-        get_stock_data, get_stock_analysis, get_market_sentiment_news, 
-        get_news_from_newsapi, tavily_search, process_search_tool
+        get_stock_data, get_stock_analysis, get_market_sentiment_news,
+        get_news_from_newsapi, get_social_sentiment,
+        tavily_search, process_search_tool
     )
     
     executors = {
@@ -129,6 +131,14 @@ def create_agent_executors(agents: Dict, memories: Dict) -> Dict[str, AgentExecu
             agent=agents['sentiment'],
             tools=[get_market_sentiment_news, get_news_from_newsapi],
             memory=memories['sentiment_memory'],
+            verbose=True,
+            handle_parsing_errors=True,
+            max_iterations=3
+        ),
+        'social_sentiment': AgentExecutor(
+            agent=agents['social_sentiment'],
+            tools=[get_social_sentiment],
+            memory=memories['social_memory'],
             verbose=True,
             handle_parsing_errors=True,
             max_iterations=3
@@ -174,6 +184,7 @@ def multi_agent_query(query: str) -> str:
         memories = {
             'stock_memory': st.session_state.stock_memory,
             'sentiment_memory': st.session_state.sentiment_memory,
+            'social_memory': st.session_state.social_memory,
             'insights_memory': st.session_state.insights_memory,
             'general_memory': st.session_state.general_memory
         }
@@ -223,6 +234,23 @@ def multi_agent_query(query: str) -> str:
                     )
                 else:
                     errors.append(f"❌ Sentiment Analysis failed: {result['error']}")
+
+            with st.spinner("📣 Gathering social media sentiment..."):
+                result = execute_agent_safely(
+                    executors['social_sentiment'],
+                    {
+                        "chat_history": memories['social_memory'].load_memory_variables({})["chat_history"],
+                        "input": f"Summarize social media sentiment for: {query}"
+                    }
+                )
+
+                if result["success"]:
+                    responses.append(f"## 🗣️ Social Sentiment\n{result['output']}")
+                    memories['social_memory'].save_context(
+                        {"input": query}, {"output": result['output']}
+                    )
+                else:
+                    errors.append(f"❌ Social Sentiment failed: {result['error']}")
         
         # Always generate insights for comprehensive analysis
         if query_type in ["stock", "sentiment", "both", "general"]:

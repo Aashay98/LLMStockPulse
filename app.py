@@ -103,7 +103,7 @@ def initialize_session_state():
         "pending_hitl_response": None,
         "hitl_log": [],
         "error_count": 0,
-        "total_queries": 0,
+        "regen_requested": False,
     }
 
     for key, default_value in defaults.items():
@@ -200,7 +200,6 @@ def execute_agent_safely(executor: AgentExecutor, input_data: Dict) -> Dict[str,
 def multi_agent_query(query: str) -> str:
     """Enhanced multi-agent query processing with better error handling."""
     try:
-        st.session_state.total_queries += 1
 
         # Initialize components
         llm = initialize_llm()
@@ -394,16 +393,6 @@ def display_sidebar():
             help="Review and edit AI responses before they're added to the conversation",
         )
 
-        st.markdown("---")
-
-        # Statistics
-        st.markdown("## 📊 Session Statistics")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Total Queries", st.session_state.total_queries)
-        with col2:
-            st.metric("Errors", st.session_state.error_count)
-
         # Conversation management
         st.markdown("---")
         st.markdown("## 💬 Conversation")
@@ -412,7 +401,6 @@ def display_sidebar():
             st.session_state.conversation_history = []
             st.session_state.latest_response = ""
             st.session_state.last_user_query = ""
-            st.session_state.total_queries = 0
             clear_history()
             st.success("Conversation history cleared!")
 
@@ -443,6 +431,15 @@ def main():
     """Main application function."""
     # Initialize session state
     initialize_session_state()
+
+    if st.session_state.pop("regen_requested", False):
+        try:
+            new_resp = multi_agent_query(st.session_state.last_user_query)
+        except Exception as e:
+            logger.error(f"Regenerate failed: {e}")
+            new_resp = f"❌ Regenerate failed: {e}"
+        st.session_state.pending_hitl_response = new_resp
+        st.session_state.hitl_edit_box = new_resp
 
     # Display header
     st.markdown(
@@ -482,6 +479,7 @@ def main():
                 if st.session_state.hitl_mode:
                     # HITL mode - show draft for review
                     st.session_state.pending_hitl_response = generated_response
+                    st.session_state.hitl_edit_box = generated_response
 
                     st.markdown("### 💡 Review Assistant's Draft Response")
                     st.info(
@@ -491,7 +489,6 @@ def main():
                     # Editable response
                     edited_response = st.text_area(
                         "Edit the response if needed:",
-                        value=generated_response,
                         height=400,
                         key="hitl_edit_box",
                     )
@@ -504,7 +501,12 @@ def main():
 
                     with col_regenerate:
                         if st.button("🔄 Regenerate Response"):
-                            st.session_state.pending_hitl_response = None
+                            st.session_state.regen_requested = True
+                            new_response = multi_agent_query(
+                                st.session_state.last_user_query
+                            )
+                            st.session_state.pending_hitl_response = new_response
+                            st.session_state.hitl_edit_box = new_response
                             st.rerun()
 
                 else:
@@ -519,6 +521,31 @@ def main():
                         ]
                     )
                     st.session_state.latest_response = generated_response
+
+        elif st.session_state.hitl_mode and st.session_state.pending_hitl_response:
+            # Show pending response (e.g., after regeneration)
+            with st.chat_message("assistant"):
+                st.markdown("### 💡 Review Assistant's Draft Response")
+                st.info(
+                    "Please review and edit the response below if needed, then click 'Approve' to add it to the conversation."
+                )
+
+                edited_response = st.text_area(
+                    "Edit the response if needed:",
+                    height=400,
+                    key="hitl_edit_box",
+                )
+
+                col_approve, col_regenerate = st.columns([1, 1])
+                with col_approve:
+                    if st.button("✅ Approve & Send", type="primary"):
+                        approve_hitl_response(st.session_state.last_user_query)
+                        st.rerun()
+
+                with col_regenerate:
+                    if st.button("🔄 Regenerate Response"):
+                        st.session_state.regen_requested = True
+                        st.rerun()
 
         # Display conversation history
         if st.session_state.conversation_history:

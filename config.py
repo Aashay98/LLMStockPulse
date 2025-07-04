@@ -12,6 +12,7 @@ NEWS_API_KEY = os.getenv("NEWS_API_KEY")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
+REDDIT_BEARER_TOKEN = os.getenv("REDDIT_BEARER_TOKEN")
 
 # Validate required API keys
 REQUIRED_KEYS = {

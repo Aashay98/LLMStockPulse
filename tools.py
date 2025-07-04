@@ -21,6 +21,7 @@ from config import (
     MAX_RETRIES,
     NEWS_API_BASE_URL,
     NEWS_API_KEY,
+    REDDIT_BEARER_TOKEN,
     REQUEST_TIMEOUT,
     TWITTER_BEARER_TOKEN,
 )
@@ -411,8 +412,10 @@ def get_social_sentiment(query: str) -> str:
 
         # Reddit via Pushshift
         try:
+            headers = {"Authorization": f"Bearer {REDDIT_BEARER_TOKEN}"}
             reddit_resp = requests.get(
                 "https://api.pushshift.io/reddit/search/comment/",
+                headers=headers,
                 params={"q": query, "size": 20},
                 timeout=REQUEST_TIMEOUT,
             )

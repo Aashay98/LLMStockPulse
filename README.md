@@ -36,6 +36,7 @@ An intelligent financial assistant that combines **LLMs**, **LangChain**, **Stre
 ### Multi-Agent System
 - **Stock Data Agent**: Real-time prices, fundamentals, technical indicators
 - **Sentiment Agent**: News analysis and market sentiment
+- **Social Sentiment Agent**: Reddit/Twitter discussions analysis
 - **Insights Agent**: Web research and comprehensive analysis
 - **General Agent**: Handles diverse financial queries
 - **Coordinator Agent**: Manages multi-agent interactions
@@ -43,6 +44,7 @@ An intelligent financial assistant that combines **LLMs**, **LangChain**, **Stre
 ### Key Features
 - 🔍 **Real-time stock data** via Alpha Vantage API
 - 📰 **News sentiment analysis** from multiple sources
+- 📣 **Social media sentiment** from Reddit and Twitter
 - 🧠 **AI-powered insights** using advanced LLMs
 - 🤖 **Human-in-the-loop** review and editing
 - 📊 **Technical analysis** with RSI, MACD indicators
@@ -53,7 +55,7 @@ An intelligent financial assistant that combines **LLMs**, **LangChain**, **Stre
 - **Frontend**: Streamlit with custom CSS
 - **LLM**: Groq (Llama 3.3 70B)
 - **Framework**: LangChain for agent orchestration
-- **APIs**: Alpha Vantage, NewsAPI, Tavily Search
+- **APIs**: Alpha Vantage, NewsAPI, Tavily Search, Twitter/X
 - **ML**: Sentence Transformers, FAISS for similarity search
 - **Data**: BeautifulSoup for web scraping
 - **Storage**: JSON-based persistent conversation history
@@ -80,6 +82,7 @@ GROQ_API_KEY=your_groq_api_key
 ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
 NEWS_API_KEY=your_newsapi_key
 TAVILY_API_KEY=your_tavily_key
+TWITTER_BEARER_TOKEN=your_twitter_bearer_token
 ```
 
 ### 4. Run Application
@@ -94,12 +97,16 @@ streamlit run app.py
 2. **Alpha Vantage**: For stock data - [Get API Key](https://www.alphavantage.co/support/#api-key)
 3. **NewsAPI**: For news data - [Get API Key](https://newsapi.org/register)
 4. **Tavily**: For web search - [Get API Key](https://tavily.com/)
+5. **Twitter/X**: For social sentiment - requires Bearer Token
+
+Reddit data is fetched via the public Pushshift API, so no key is needed.
 
 ### API Limits
 - Alpha Vantage: 25 requests/day (free tier)
 - NewsAPI: 1000 requests/month (free tier)
 - Tavily: 1000 requests/month (free tier)
 - Groq: Generous free tier with high rate limits
+- Twitter/X: subject to standard API usage limits
 
 ## 💬 Example Queries
 

@@ -13,6 +13,7 @@ from langchain.tools import tool
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.documents import Document
 from sentence_transformers import SentenceTransformer
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 from config import (
     ALPHA_VANTAGE_API_KEY,
@@ -21,8 +22,9 @@ from config import (
     NEWS_API_BASE_URL,
     NEWS_API_KEY,
     REQUEST_TIMEOUT,
+    TWITTER_BEARER_TOKEN,
 )
-from exceptions import APIException
+from exceptions import APIException, DataProcessingException
 from utils import (
     clean_content,
     format_large_number,
@@ -111,7 +113,7 @@ def get_stock_data(stock_symbol: str, data_type: str = "intraday") -> str:
         return f"❌ Error fetching stock data: {str(e)}"
 
 
-def _format_stock_data(data: Dict[str, Any], symbol: str, data_type: str) -> str:
+def _format_stock_data(data: Dict[str, Any], symbol: str, data_type: str) -> str:  # type: ignore
     """Format stock data based on type."""
     try:
         if data_type == "intraday":
@@ -398,6 +400,67 @@ def get_news_from_newsapi(query: str) -> str:
     except Exception as e:
         logger.error(f"Error fetching news from NewsAPI: {e}")
         return f"❌ Error fetching news: {str(e)}"
+
+
+@tool("social_sentiment_tool", return_direct=False)
+def get_social_sentiment(query: str) -> str:
+    """Analyze social media sentiment from Reddit and Twitter."""
+    try:
+        analyzer = SentimentIntensityAnalyzer()
+        posts = []
+
+        # Reddit via Pushshift
+        try:
+            reddit_resp = requests.get(
+                "https://api.pushshift.io/reddit/search/comment/",
+                params={"q": query, "size": 20},
+                timeout=REQUEST_TIMEOUT,
+            )
+            reddit_resp.raise_for_status()
+            posts.extend(
+                [d.get("body", "") for d in reddit_resp.json().get("data", [])]
+            )
+        except Exception as e:
+            logger.warning(f"Reddit data fetch failed: {e}")
+
+        # Twitter recent search
+        if TWITTER_BEARER_TOKEN:
+            try:
+                headers = {"Authorization": f"Bearer {TWITTER_BEARER_TOKEN}"}
+                twitter_resp = requests.get(
+                    "https://api.twitter.com/2/tweets/search/recent",
+                    headers=headers,
+                    params={"query": query, "max_results": 20, "tweet.fields": "text"},
+                    timeout=REQUEST_TIMEOUT,
+                )
+                twitter_resp.raise_for_status()
+                posts.extend(
+                    [t.get("text", "") for t in twitter_resp.json().get("data", [])]
+                )
+            except Exception as e:
+                logger.warning(f"Twitter data fetch failed: {e}")
+
+        if not posts:
+            return "No social media posts found for this query."
+
+        scores = [analyzer.polarity_scores(p)["compound"] for p in posts if p]
+        avg_score = sum(scores) / len(scores)
+
+        if avg_score > 0.1:
+            label = "Positive"
+        elif avg_score < -0.1:
+            label = "Negative"
+        else:
+            label = "Neutral"
+
+        return (
+            f"🗣️ **Social Media Sentiment for '{query}'**\n"
+            f"• Posts analyzed: {len(scores)}\n"
+            f"• Average Sentiment Score: {avg_score:.2f} ({label})"
+        )
+    except Exception as e:
+        logger.error(f"Error fetching social sentiment: {e}")
+        return f"❌ Error fetching social sentiment: {str(e)}"
 
 
 @tool("get_stock_analysis_tool", return_direct=False)

@@ -6,6 +6,7 @@ from langchain.tools import BaseTool
 from tools import (
     get_market_sentiment_news,
     get_news_from_newsapi,
+    get_social_sentiment,
     get_stock_analysis,
     get_stock_data,
     process_search_tool,
@@ -56,6 +57,22 @@ Your responsibilities:
 - Correlate sentiment trends with potential price movements
 
 Provide balanced analysis that considers both positive and negative sentiment factors."""
+
+    prompt = create_enhanced_prompt(system_message)
+    return create_tool_calling_agent(llm, tools, prompt)
+
+def create_social_sentiment_agent(llm):
+    """Create specialized agent for social media sentiment."""
+    tools = [get_social_sentiment]
+
+    system_message = """You analyze social media discussions on Reddit and Twitter to gauge market sentiment.
+
+Your responsibilities:
+- Fetch recent posts and comments about companies or topics
+- Summarize positive and negative opinions
+- Provide an overall sentiment score
+
+Focus on capturing the crowd's mood from social platforms."""
 
     prompt = create_enhanced_prompt(system_message)
     return create_tool_calling_agent(llm, tools, prompt)

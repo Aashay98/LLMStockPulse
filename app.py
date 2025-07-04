@@ -57,6 +57,23 @@ st.markdown(
         padding: 1rem;
         margin: 1rem 0;
     }
+    /* Chat bubbles */
+    .stChatMessage {
+        padding: 0.5rem 1rem;
+        border-radius: 1rem;
+        margin-bottom: 0.5rem;
+        max-width: 80%;
+    }
+    .stChatMessage.user {
+        background-color: var(--primary-color);
+        color: #ffffff;
+        align-self: flex-end;
+    }
+    .stChatMessage.assistant {
+        background-color: var(--secondary-background-color);
+        color: var(--text-color);
+        align-self: flex-start;
+    }
 </style>
 """,
     unsafe_allow_html=True,
@@ -148,7 +165,7 @@ def create_agent_executors(agents: Dict, memories: Dict) -> Dict[str, AgentExecu
             memory=memories["stock_memory"],
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=3,
+            max_iterations=5,
         ),
         "sentiment": AgentExecutor(
             agent=agents["sentiment"],
@@ -156,7 +173,7 @@ def create_agent_executors(agents: Dict, memories: Dict) -> Dict[str, AgentExecu
             memory=memories["sentiment_memory"],
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=3,
+            max_iterations=5,
         ),
         "social_sentiment": AgentExecutor(
             agent=agents["social_sentiment"],
@@ -164,7 +181,7 @@ def create_agent_executors(agents: Dict, memories: Dict) -> Dict[str, AgentExecu
             memory=memories["social_memory"],
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=3,
+            max_iterations=5,
         ),
         "insights": AgentExecutor(
             agent=agents["insights"],
@@ -172,7 +189,7 @@ def create_agent_executors(agents: Dict, memories: Dict) -> Dict[str, AgentExecu
             memory=memories["insights_memory"],
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=3,
+            max_iterations=5,
         ),
         "general": AgentExecutor(
             agent=agents["general"],
@@ -180,7 +197,7 @@ def create_agent_executors(agents: Dict, memories: Dict) -> Dict[str, AgentExecu
             memory=memories["general_memory"],
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=3,
+            max_iterations=5,
         ),
     }
 

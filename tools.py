@@ -1,8 +1,6 @@
-import asyncio
 import logging
 import time
-from functools import partial
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import faiss
 import numpy as np
@@ -25,7 +23,7 @@ from config import (
     REQUEST_TIMEOUT,
     TWITTER_BEARER_TOKEN,
 )
-from exceptions import APIException, DataProcessingException
+from exceptions import APIException
 from utils import (
     clean_content,
     format_large_number,

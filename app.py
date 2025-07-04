@@ -7,11 +7,10 @@ from langchain.agents import AgentExecutor
 from langchain.memory import ConversationBufferMemory
 from langchain_groq import ChatGroq
 
+import config
 from agents import *
-from config import GROQ_API_KEY
-from exceptions import StockAppException
 from storage import append_history, clear_history, load_history
-from utils import classify_query, generate_insights_prompt
+from utils import classify_query, friendly_error_message, generate_insights_prompt
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -85,7 +84,7 @@ def initialize_llm():
     """Initialize and cache the LLM."""
     try:
         return ChatGroq(
-            model="llama-3.3-70b-versatile", temperature=0, api_key=GROQ_API_KEY
+            model="llama-3.3-70b-versatile", temperature=0, api_key=config.GROQ_API_KEY
         )
     except Exception as e:
         st.error(f"Failed to initialize LLM: {e}")
@@ -165,7 +164,7 @@ def create_agent_executors(agents: Dict, memories: Dict) -> Dict[str, AgentExecu
             memory=memories["stock_memory"],
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=5,
+            max_iterations=config.MAX_AGENT_ITERATIONS,
         ),
         "sentiment": AgentExecutor(
             agent=agents["sentiment"],
@@ -173,7 +172,7 @@ def create_agent_executors(agents: Dict, memories: Dict) -> Dict[str, AgentExecu
             memory=memories["sentiment_memory"],
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=5,
+            max_iterations=config.MAX_AGENT_ITERATIONS,
         ),
         "social_sentiment": AgentExecutor(
             agent=agents["social_sentiment"],
@@ -181,7 +180,7 @@ def create_agent_executors(agents: Dict, memories: Dict) -> Dict[str, AgentExecu
             memory=memories["social_memory"],
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=5,
+            max_iterations=config.MAX_AGENT_ITERATIONS,
         ),
         "insights": AgentExecutor(
             agent=agents["insights"],
@@ -189,7 +188,7 @@ def create_agent_executors(agents: Dict, memories: Dict) -> Dict[str, AgentExecu
             memory=memories["insights_memory"],
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=5,
+            max_iterations=config.MAX_AGENT_ITERATIONS,
         ),
         "general": AgentExecutor(
             agent=agents["general"],
@@ -197,7 +196,7 @@ def create_agent_executors(agents: Dict, memories: Dict) -> Dict[str, AgentExecu
             memory=memories["general_memory"],
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=5,
+            max_iterations=config.MAX_AGENT_ITERATIONS,
         ),
     }
 
@@ -211,7 +210,7 @@ def execute_agent_safely(executor: AgentExecutor, input_data: Dict) -> Dict[str,
         return {"success": True, "output": result.get("output", "No output generated")}
     except Exception as e:
         logger.error(f"Agent execution failed: {e}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": friendly_error_message(str(e))}
 
 
 def multi_agent_query(query: str) -> str:
@@ -475,6 +474,12 @@ def main():
     col1, col2 = st.columns([3, 1])
 
     with col1:
+
+        if st.session_state.conversation_history:
+            for message in st.session_state.conversation_history:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+
         # Chat input
         user_query = st.chat_input(
             "What would you like to know about the markets today?",
@@ -563,15 +568,6 @@ def main():
                     if st.button("🔄 Regenerate Response"):
                         st.session_state.regen_requested = True
                         st.rerun()
-
-        # Display conversation history
-        if st.session_state.conversation_history:
-            st.markdown("---")
-            st.markdown("### 💬 Conversation History")
-
-            for message in st.session_state.conversation_history:
-                with st.chat_message(message["role"]):
-                    st.markdown(message["content"])
 
 
 if __name__ == "__main__":

@@ -239,6 +239,9 @@ def create_agent_executors(agents: Dict, memories: Dict) -> Dict[str, AgentExecu
 def execute_agent_safely(executor: AgentExecutor, input_data: Dict) -> Dict[str, str]:
     """Execute agent with proper error handling."""
     try:
+        from rate_limit import check_api_usage
+
+        check_api_usage("groq")
         result = executor.invoke(input_data)
         return {"success": True, "output": result.get("output", "No output generated")}
     except Exception as e:

@@ -25,6 +25,7 @@ from config import (
 )
 from exceptions import APIException
 from log_config import configure_logging
+from rate_limit import check_api_usage
 from utils import (
     clean_content,
     format_large_number,
@@ -46,9 +47,14 @@ def get_sentence_transformer():
 
 
 def make_api_request(
-    url: str, params: Dict[str, Any], timeout: int = REQUEST_TIMEOUT
+    url: str,
+    params: Dict[str, Any],
+    timeout: int = REQUEST_TIMEOUT,
+    api_name: str | None = None,
 ) -> Dict[str, Any]:
     """Make API request with retry logic and error handling."""
+    if api_name:
+        check_api_usage(api_name)
     for attempt in range(MAX_RETRIES):
         try:
             response = requests.get(url, params=params, timeout=timeout)
@@ -104,7 +110,9 @@ def get_stock_data(stock_symbol: str, data_type: str = "intraday") -> str:
             return f"Invalid data type '{data_type}'. Choose from: {', '.join(data_type_configs.keys())}"
 
         params.update(data_type_configs[data_type])
-        data = make_api_request(ALPHA_VANTAGE_BASE_URL, params)
+        data = make_api_request(
+            ALPHA_VANTAGE_BASE_URL, params, api_name="alpha_vantage"
+        )
 
         return _format_stock_data(data, stock_symbol, data_type)
 
@@ -217,7 +225,9 @@ def get_market_sentiment_news(ticker: str = None, topics: str = None) -> str:
         if topics:
             params["topics"] = topics
 
-        data = make_api_request(ALPHA_VANTAGE_BASE_URL, params)
+        data = make_api_request(
+            ALPHA_VANTAGE_BASE_URL, params, api_name="alpha_vantage"
+        )
         news_items = data.get("feed", [])
 
         if not news_items:
@@ -294,6 +304,7 @@ def process_search_tool(url: str) -> str:
 def tavily_search(query: str) -> List[Document]:
     """Enhanced search with RAG processing and better error handling."""
     try:
+        check_api_usage("tavily")
         tavily = TavilySearchResults(
             max_results=5,
             search_depth="advanced",
@@ -377,8 +388,7 @@ def get_news_from_newsapi(query: str) -> str:
             "pageSize": 3,
         }
 
-        data = make_api_request(NEWS_API_BASE_URL, params)
-
+        data = make_api_request(NEWS_API_BASE_URL, params, api_name="newsapi")
         if data.get("status") != "ok":
             return f"❌ NewsAPI error: {data.get('message', 'Unknown error')}"
 
@@ -411,7 +421,10 @@ def get_social_sentiment(query: str) -> str:
 
         # Reddit via Pushshift
         try:
-            headers = {"Authorization": f"Bearer {REDDIT_BEARER_TOKEN}"}
+            headers = {}
+            check_api_usage("reddit")
+            if REDDIT_BEARER_TOKEN:
+                headers["Authorization"] = f"Bearer {REDDIT_BEARER_TOKEN}"
             reddit_resp = requests.get(
                 "https://api.pushshift.io/reddit/search/comment/",
                 headers=headers,
@@ -429,6 +442,7 @@ def get_social_sentiment(query: str) -> str:
         if TWITTER_BEARER_TOKEN:
             try:
                 headers = {"Authorization": f"Bearer {TWITTER_BEARER_TOKEN}"}
+                check_api_usage("twitter")
                 twitter_resp = requests.get(
                     "https://api.twitter.com/2/tweets/search/recent",
                     headers=headers,
@@ -470,9 +484,6 @@ def get_stock_analysis(symbol: str) -> str:
     """Comprehensive stock analysis with buy/hold/sell recommendation."""
     try:
         symbol = validate_stock_symbol(symbol)
-
-        # Fetch multiple data points
-        analysis_data = {}
 
         # Get overview data
         overview_params = {

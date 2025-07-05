@@ -10,6 +10,7 @@ from langchain_groq import ChatGroq
 
 import config
 from agents import *
+from log_config import configure_logging
 from storage import append_history, clear_history, load_history
 from utils import (
     classify_query,
@@ -37,7 +38,7 @@ def login_screen() -> None:
 
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 torch.classes.__path__ = []  # add this line to manually set it to empty.

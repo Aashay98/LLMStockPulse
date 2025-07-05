@@ -83,7 +83,22 @@ ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
 NEWS_API_KEY=your_newsapi_key
 TAVILY_API_KEY=your_tavily_key
 TWITTER_BEARER_TOKEN=your_twitter_bearer_token
+# Optional Pushshift token for Reddit data
+REDDIT_BEARER_TOKEN=your_reddit_bearer_token
+# Optional user login ("username:password" pairs)
+USER_CREDENTIALS=admin:admin
+# API limit overrides (defaults shown)
+ALPHA_VANTAGE_DAILY_LIMIT=25
+NEWSAPI_MONTHLY_LIMIT=1000
+TAVILY_MONTHLY_LIMIT=1000
+GROQ_DAILY_LIMIT=1000
+TWITTER_DAILY_LIMIT=300
+# Optional runtime settings (defaults shown)
+MAX_AGENT_ITERATIONS=10
+MEMORY_WINDOW_SIZE=5
 ```
+`MAX_AGENT_ITERATIONS` controls how many times an agent may run per query.
+`MEMORY_WINDOW_SIZE` sets the number of recent messages each agent retains.
 
 ### 4. Run Application
 ```bash
@@ -99,7 +114,8 @@ streamlit run app.py
 4. **Tavily**: For web search - [Get API Key](https://tavily.com/)
 5. **Twitter/X**: For social sentiment - requires Bearer Token
 
-Reddit data is fetched via the public Pushshift API, so no key is needed.
+Reddit data is fetched via the Pushshift API. A token is optional and can be
+set with `REDDIT_BEARER_TOKEN` for higher request limits.
 
 ### API Limits
 - Alpha Vantage: 25 requests/day (free tier)
@@ -162,6 +178,7 @@ The application includes comprehensive error handling:
 - Query classification metrics
 - HITL edit logging
 - Performance monitoring
+- File logging to `app.log`
 
 ## 🔒 Security Considerations
 

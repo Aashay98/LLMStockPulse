@@ -24,6 +24,7 @@ from config import (
     TWITTER_BEARER_TOKEN,
 )
 from exceptions import APIException
+from log_config import configure_logging
 from utils import (
     clean_content,
     format_large_number,
@@ -33,7 +34,7 @@ from utils import (
 )
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 

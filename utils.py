@@ -1,3 +1,4 @@
+import difflib
 import logging
 import re
 from typing import List
@@ -176,6 +177,22 @@ def format_large_number(number: float) -> str:
         return f"${number/1e3:.2f}K"
     else:
         return f"${number:.2f}"
+
+
+def diff_text(original: str, edited: str) -> str:
+    """Return a unified diff between two text blocks."""
+    if original is None:
+        original = ""
+    if edited is None:
+        edited = ""
+    diff = difflib.unified_diff(
+        original.splitlines(),
+        edited.splitlines(),
+        fromfile="original",
+        tofile="edited",
+        lineterm="",
+    )
+    return "\n".join(diff)
 
 
 def friendly_error_message(error: str) -> str:

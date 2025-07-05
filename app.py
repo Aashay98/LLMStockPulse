@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import Dict
 
 import streamlit as st
@@ -10,7 +11,13 @@ from langchain_groq import ChatGroq
 import config
 from agents import *
 from storage import append_history, clear_history, load_history
-from utils import classify_query, friendly_error_message, generate_insights_prompt
+from utils import (
+    classify_query,
+    diff_text,
+    friendly_error_message,
+    generate_insights_prompt,
+    trim_text_to_token_limit,
+)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -115,7 +122,7 @@ def initialize_session_state():
         "conversation_history": [],
         "latest_response": "",
         "last_user_query": "",
-        "hitl_mode": True,
+        "hitl_mode": False,
         "pending_hitl_response": None,
         "hitl_log": [],
         "error_count": 0,
@@ -360,16 +367,19 @@ def approve_hitl_response(user_query: str):
         final_response = st.session_state.hitl_edit_box
         original_response = st.session_state.pending_hitl_response
 
-        # Log the edit if response was modified
-        if final_response != original_response:
-            st.session_state.hitl_log.append(
-                {
-                    "query": user_query,
-                    "original_response": original_response,
-                    "edited_response": final_response,
-                    "timestamp": st.session_state.get("current_time", "Unknown"),
-                }
-            )
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        diff = diff_text(original_response, final_response)
+
+        st.session_state.hitl_log.append(
+            {
+                "query": user_query,
+                "original_response": original_response,
+                "edited_response": final_response,
+                "timestamp": timestamp,
+                "status": "approved",
+                "diff": diff,
+            }
+        )
 
         # Add to conversation history
         st.session_state.conversation_history.extend(
@@ -397,6 +407,25 @@ def approve_hitl_response(user_query: str):
         st.error(f"Error approving response: {e}")
 
 
+def reject_hitl_response(user_query: str):
+    """Discard the pending response and log the action."""
+    try:
+        st.session_state.hitl_log.append(
+            {
+                "query": user_query,
+                "original_response": st.session_state.pending_hitl_response,
+                "edited_response": None,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "status": "rejected",
+                "diff": "",
+            }
+        )
+        st.session_state.pending_hitl_response = None
+        st.warning("❌ Response rejected and discarded.")
+    except Exception as e:
+        st.error(f"Error rejecting response: {e}")
+
+
 def display_sidebar():
     """Display enhanced sidebar with controls and statistics."""
     with st.sidebar:
@@ -422,25 +451,40 @@ def display_sidebar():
 
         # HITL log viewer
         if st.session_state.hitl_log and st.checkbox("🔍 View HITL Edit Log"):
-            st.markdown("### Recent Edits")
+            st.markdown("### Recent HITL Actions")
             for i, entry in enumerate(reversed(st.session_state.hitl_log[-5:]), 1):
-                with st.expander(f"Edit {i}: {entry['query'][:30]}..."):
-                    st.markdown("**Original:**")
-                    st.text_area(
-                        "",
-                        entry["original_response"],
-                        height=100,
-                        key=f"orig_{i}",
-                        disabled=True,
-                    )
-                    st.markdown("**Edited:**")
-                    st.text_area(
-                        "",
-                        entry["edited_response"],
-                        height=100,
-                        key=f"edit_{i}",
-                        disabled=True,
-                    )
+                label = "Edit" if entry.get("status") == "approved" else "Reject"
+                with st.expander(f"{label} {i}: {entry['query'][:30]}..."):
+                    st.markdown(f"**Timestamp:** {entry.get('timestamp','')}  ")
+                    if entry.get("status") == "rejected":
+                        st.markdown("Response was rejected.")
+                        st.text_area(
+                            "Original",
+                            entry.get("original_response", ""),
+                            height=100,
+                            key=f"orig_{i}",
+                            disabled=True,
+                        )
+                    else:
+                        st.markdown("**Original:**")
+                        st.text_area(
+                            "",
+                            entry.get("original_response", ""),
+                            height=100,
+                            key=f"orig_{i}",
+                            disabled=True,
+                        )
+                        st.markdown("**Final:**")
+                        st.text_area(
+                            "",
+                            entry.get("edited_response", ""),
+                            height=100,
+                            key=f"edit_{i}",
+                            disabled=True,
+                        )
+                        if entry.get("diff"):
+                            st.markdown("**Changes:**")
+                            st.code(entry["diff"], language="diff")
 
 
 def main():
@@ -515,7 +559,7 @@ def main():
                         key="hitl_edit_box",
                     )
 
-                    col_approve, col_regenerate = st.columns([1, 1])
+                    col_approve, col_regenerate, col_reject = st.columns([1, 1, 1])
                     with col_approve:
                         if st.button("✅ Approve & Send", type="primary"):
                             approve_hitl_response(user_query)
@@ -529,6 +573,10 @@ def main():
                             )
                             st.session_state.pending_hitl_response = new_response
                             st.session_state.hitl_edit_box = new_response
+                            st.rerun()
+                    with col_reject:
+                        if st.button("🗑️ Reject"):
+                            reject_hitl_response(user_query)
                             st.rerun()
 
                 else:
@@ -558,7 +606,7 @@ def main():
                     key="hitl_edit_box",
                 )
 
-                col_approve, col_regenerate = st.columns([1, 1])
+                col_approve, col_regenerate, col_reject = st.columns([1, 1, 1])
                 with col_approve:
                     if st.button("✅ Approve & Send", type="primary"):
                         approve_hitl_response(st.session_state.last_user_query)
@@ -567,6 +615,11 @@ def main():
                 with col_regenerate:
                     if st.button("🔄 Regenerate Response"):
                         st.session_state.regen_requested = True
+                        st.rerun()
+
+                with col_reject:
+                    if st.button("🗑️ Reject"):
+                        reject_hitl_response(st.session_state.last_user_query)
                         st.rerun()
 
 

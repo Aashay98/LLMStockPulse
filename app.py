@@ -5,7 +5,7 @@ from typing import Dict
 import streamlit as st
 import torch
 from langchain.agents import AgentExecutor
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ConversationBufferWindowMemory
 from langchain_groq import ChatGroq
 
 import config
@@ -16,7 +16,6 @@ from utils import (
     diff_text,
     friendly_error_message,
     generate_insights_prompt,
-    trim_text_to_token_limit,
 )
 
 # Configure logging
@@ -147,8 +146,10 @@ def initialize_session_state():
     ]
     for memory_key in memory_keys:
         if memory_key not in st.session_state:
-            st.session_state[memory_key] = ConversationBufferMemory(
-                return_messages=True, memory_key="chat_history"
+            st.session_state[memory_key] = ConversationBufferWindowMemory(
+                k=config.MEMORY_WINDOW_SIZE,
+                return_messages=True,
+                memory_key="chat_history",
             )
 
 

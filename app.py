@@ -108,7 +108,9 @@ def initialize_llm():
     """Initialize and cache the LLM."""
     try:
         return ChatGroq(
-            model="llama-3.3-70b-versatile", temperature=0, api_key=config.GROQ_API_KEY
+            model="deepseek-r1-distill-llama-70b",
+            temperature=0,
+            api_key=config.GROQ_API_KEY,
         )
     except Exception as e:
         st.error(f"Failed to initialize LLM: {e}")
@@ -343,7 +345,7 @@ def multi_agent_query(query: str) -> str:
                 )
 
                 if result["success"]:
-                    responses.append(f"## � Market Insights\n{result['output']}")
+                    responses.append(f"## Market Insights\n{result['output']}")
                     memories["insights_memory"].save_context(
                         {"input": insights_prompt}, {"output": result["output"]}
                     )

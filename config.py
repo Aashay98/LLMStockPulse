@@ -1,9 +1,20 @@
 import os
+from typing import Dict
 
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
+
+
+def parse_credentials(value: str) -> Dict[str, str]:
+    """Parse USER_CREDENTIALS env variable into a dict."""
+    creds: Dict[str, str] = {}
+    for pair in value.split(","):
+        if ":" in pair:
+            user, pwd = pair.split(":", 1)
+            creds[user.strip()] = pwd.strip()
+    return creds
 
 
 # API Keys with validation
@@ -13,6 +24,8 @@ TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN")
 REDDIT_BEARER_TOKEN = os.getenv("REDDIT_BEARER_TOKEN")
+USER_CREDENTIALS = parse_credentials(os.getenv("USER_CREDENTIALS", "admin:admin"))
+
 
 # Validate required API keys
 REQUIRED_KEYS = {

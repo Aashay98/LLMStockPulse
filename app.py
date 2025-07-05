@@ -18,6 +18,24 @@ from utils import (
     generate_insights_prompt,
 )
 
+
+def login_screen() -> None:
+    """Simple username/password login."""
+    st.markdown("## 🔐 Login")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    if st.button("Login"):
+        if config.USER_CREDENTIALS.get(username) == password:
+            st.session_state.authenticated = True
+            st.session_state.user_id = username
+            st.session_state.conversation_history = load_history(username)
+            st.success("Logged in!")
+            st.rerun()
+        else:
+            st.error("Invalid credentials")
+    st.stop()
+
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -126,6 +144,8 @@ def initialize_session_state():
         "hitl_log": [],
         "error_count": 0,
         "regen_requested": False,
+        "authenticated": False,
+        "user_id": "",
     }
 
     for key, default_value in defaults.items():
@@ -133,8 +153,10 @@ def initialize_session_state():
             st.session_state[key] = default_value
 
     # Load persistent conversation history if available
-    if not st.session_state["conversation_history"]:
-        st.session_state["conversation_history"] = load_history()
+    if not st.session_state["conversation_history"] and st.session_state.get("user_id"):
+        st.session_state["conversation_history"] = load_history(
+            st.session_state["user_id"]
+        )
 
     # Initialize memories for each agent
     memory_keys = [
@@ -395,7 +417,8 @@ def approve_hitl_response(user_query: str):
             [
                 {"role": "user", "content": user_query},
                 {"role": "assistant", "content": final_response},
-            ]
+            ],
+            st.session_state.get("user_id", "default"),
         )
 
         st.session_state.latest_response = final_response
@@ -430,6 +453,11 @@ def reject_hitl_response(user_query: str):
 def display_sidebar():
     """Display enhanced sidebar with controls and statistics."""
     with st.sidebar:
+        st.markdown(f"**User:** {st.session_state.get('user_id','guest')}")
+        if st.button("Logout"):
+            st.session_state.authenticated = False
+            st.session_state.user_id = ""
+            st.rerun()
         st.markdown("## 🎛️ Controls")
 
         # HITL toggle
@@ -447,7 +475,7 @@ def display_sidebar():
             st.session_state.conversation_history = []
             st.session_state.latest_response = ""
             st.session_state.last_user_query = ""
-            clear_history()
+            clear_history(st.session_state.get("user_id", "default"))
             st.success("Conversation history cleared!")
 
         # HITL log viewer
@@ -492,7 +520,8 @@ def main():
     """Main application function."""
     # Initialize session state
     initialize_session_state()
-
+    if not st.session_state.authenticated:
+        login_screen()
     if st.session_state.pop("regen_requested", False):
         try:
             new_resp = multi_agent_query(st.session_state.last_user_query)
@@ -504,7 +533,7 @@ def main():
 
     # Display header
     st.markdown(
-        '<h1 class="main-header">📈 Stock Insight Assistant</h1>',
+        '<h1 class="main-header">Stock Insight Assistant</h1>',
         unsafe_allow_html=True,
     )
     st.markdown(

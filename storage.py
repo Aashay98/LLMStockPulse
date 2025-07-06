@@ -1,47 +1,28 @@
-import json
-import os
-from threading import Lock
-from typing import List, Dict
+"""Database-backed storage for user conversation history."""
 
-HISTORY_FILE = "conversation_history.json"
-_lock = Lock()
+from typing import Dict, List
 
-
-def _load_all() -> Dict[str, List[Dict[str, str]]]:
-    """Load the entire history JSON file."""
-    if os.path.exists(HISTORY_FILE):
-        try:
-            with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except json.JSONDecodeError:
-            return {}
-    return {}
+from database import append_history as db_append
+from database import clear_history as db_clear
+from database import load_history as db_load
+from database import load_relevant_history as db_load_relevant
 
 
 def load_history(user_id: str = "default") -> List[Dict[str, str]]:
-    """Return conversation history for a given user."""
-    data = _load_all()
-    return data.get(user_id, [])
+    """Return conversation history for the given user."""
+    return db_load(user_id)
 
 
 def append_history(entries: List[Dict[str, str]], user_id: str = "default") -> None:
-    """Append new conversation entries for a user."""
-    with _lock:
-        data = _load_all()
-        history = data.get(user_id, [])
-        history.extend(entries)
-        data[user_id] = history
-        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
+    """Append messages to a user's history."""
+    db_append(entries, user_id)
 
 
 def clear_history(user_id: str = "default") -> None:
-    """Remove history for a user from disk."""
-    with _lock:
-        if not os.path.exists(HISTORY_FILE):
-            return
-        data = _load_all()
-        if user_id in data:
-            del data[user_id]
-            with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2)
+    """Clear all history for a user."""
+    db_clear(user_id)
+
+
+def load_relevant_history(user_id: str, query: str, limit: int) -> List[Dict[str, str]]:
+    """Fetch the most relevant history entries for the given query."""
+    return db_load_relevant(user_id, query, limit)

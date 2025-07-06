@@ -10,8 +10,9 @@ from langchain_groq import ChatGroq
 
 import config
 from agents import *
+from database import init_db, verify_user
 from log_config import configure_logging
-from storage import append_history, clear_history, load_history
+from storage import append_history, clear_history, load_history, load_relevant_history
 from utils import (
     classify_query,
     diff_text,
@@ -21,12 +22,12 @@ from utils import (
 
 
 def login_screen() -> None:
-    """Simple username/password login."""
+    """Login form that checks credentials against the database."""
     st.markdown("## 🔐 Login")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
     if st.button("Login"):
-        if config.USER_CREDENTIALS.get(username) == password:
+        if verify_user(username, password):
             st.session_state.authenticated = True
             st.session_state.user_id = username
             st.session_state.conversation_history = load_history(username)
@@ -40,6 +41,8 @@ def login_screen() -> None:
 # Configure logging
 configure_logging()
 logger = logging.getLogger(__name__)
+
+init_db()
 
 torch.classes.__path__ = []  # add this line to manually set it to empty.
 
@@ -267,6 +270,16 @@ def multi_agent_query(query: str) -> str:
 
         executors = create_agent_executors(agents, memories)
 
+        # Retrieve relevant context from persistent history
+        user_id = st.session_state.get("user_id", "default")
+        context_entries = load_relevant_history(
+            user_id, query, config.MEMORY_WINDOW_SIZE
+        )
+        context_text = "\n".join(
+            f"{e['role']}: {e['content']}" for e in context_entries
+        )
+        context_prefix = f"{context_text}\n\n" if context_text else ""
+
         # Classify query and determine which agents to use
         query_type = classify_query(query)
         logger.info(f"Query classified as: {query_type}")
@@ -283,7 +296,7 @@ def multi_agent_query(query: str) -> str:
                         "chat_history": memories["stock_memory"].load_memory_variables(
                             {}
                         )["chat_history"],
-                        "input": f"Provide comprehensive stock analysis for: {query}",
+                        "input": f"{context_prefix}Provide comprehensive stock analysis for: {query}",
                     },
                 )
 
@@ -303,12 +316,12 @@ def multi_agent_query(query: str) -> str:
                         "chat_history": memories[
                             "sentiment_memory"
                         ].load_memory_variables({})["chat_history"],
-                        "input": f"Analyze market sentiment and news for: {query}",
+                        "input": f"{context_prefix}Analyze market sentiment and news for: {query}",
                     },
                 )
 
                 if result["success"]:
-                    responses.append(f"## � Sentiment Analysis\n{result['output']}")
+                    responses.append(f"## Sentiment Analysis\n{result['output']}")
                     memories["sentiment_memory"].save_context(
                         {"input": query}, {"output": result["output"]}
                     )
@@ -322,7 +335,7 @@ def multi_agent_query(query: str) -> str:
                         "chat_history": memories["social_memory"].load_memory_variables(
                             {}
                         )["chat_history"],
-                        "input": f"Summarize social media sentiment for: {query}",
+                        "input": f"{context_prefix}Summarize social media sentiment for: {query}",
                     },
                 )
 
@@ -344,7 +357,7 @@ def multi_agent_query(query: str) -> str:
                         "chat_history": memories[
                             "insights_memory"
                         ].load_memory_variables({})["chat_history"],
-                        "input": insights_prompt,
+                        "input": f"{context_prefix}{insights_prompt}",
                     },
                 )
 
@@ -368,7 +381,7 @@ def multi_agent_query(query: str) -> str:
                         "chat_history": memories[
                             "general_memory"
                         ].load_memory_variables({})["chat_history"],
-                        "input": query,
+                        "input": f"{context_prefix}{query}",
                     },
                 )
 
@@ -417,7 +430,6 @@ def approve_hitl_response(user_query: str):
                 {"role": "assistant", "content": final_response},
             ]
         )
-
         # Persist to storage
         append_history(
             [
@@ -614,17 +626,19 @@ def main():
                         if st.button("🗑️ Reject"):
                             reject_hitl_response(user_query)
                             st.rerun()
-
                 else:
                     # Direct mode - show response immediately
                     st.markdown(generated_response)
-
+                    response_dict = [
+                        {"role": "user", "content": user_query},
+                        {"role": "assistant", "content": generated_response},
+                    ]
                     # Add to conversation history
-                    st.session_state.conversation_history.extend(
-                        [
-                            {"role": "user", "content": user_query},
-                            {"role": "assistant", "content": generated_response},
-                        ]
+                    st.session_state.conversation_history.extend(response_dict)
+                    # Persist to storage
+                    append_history(
+                        response_dict,
+                        st.session_state.get("user_id", "default"),
                     )
                     st.session_state.latest_response = generated_response
 

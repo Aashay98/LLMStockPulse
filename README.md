@@ -58,7 +58,7 @@ An intelligent financial assistant that combines **LLMs**, **LangChain**, **Stre
 - **APIs**: Alpha Vantage, NewsAPI, Tavily Search, Twitter/X
 - **ML**: Sentence Transformers, FAISS for similarity search
 - **Data**: BeautifulSoup for web scraping
-- **Storage**: JSON-based persistent conversation history
+- **Storage**: PostgreSQL database storing conversation history as vector embeddings
 
 ## 🔧 Setup & Installation
 
@@ -149,6 +149,8 @@ set with `REDDIT_BEARER_TOKEN` for higher request limits.
 - Track editing history and patterns
 - Conversation history persisted on disk (cleared via sidebar button)
 - Toggle between automatic and review modes
+- Conversation history stored as vector embeddings in PostgreSQL (cleared via sidebar button)
+
 
 ### Multi-Agent Coordination
 - Intelligent query classification
@@ -187,6 +189,7 @@ The application includes comprehensive error handling:
 - Safe type conversions
 - Error message sanitization
 - No sensitive data logging
+- Passwords stored securely using bcrypt hashes
 
 ## 🤝 Contributing
 

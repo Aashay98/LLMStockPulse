@@ -5,7 +5,6 @@ An intelligent financial assistant that combines **LLMs**, **LangChain**, **Stre
 ## 🚀 Recent Improvements (v2.0)
 
 ### 🐛 Bug Fixes
-- **Fixed missing import**: Added `partial` import for async URL processing
 - **Enhanced error handling**: Comprehensive exception handling across all modules
 - **API validation**: Proper validation of API responses and error messages
 - **Memory management**: Fixed memory initialization and context saving
@@ -65,8 +64,8 @@ An intelligent financial assistant that combines **LLMs**, **LangChain**, **Stre
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/Aashay98/LLMStockPulse-main.git
-cd LLMStockPulse-main
+git clone https://github.com/Aashay98/LLMStockPulse.git
+cd LLMStockPulse
 ```
 
 ### 2. Environment Setup

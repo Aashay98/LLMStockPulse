@@ -23,4 +23,4 @@ jobs:
           python -m py_compile $(git ls-files '*.py')
       - name: Build Docker image
         run: |
-          docker build -t llmstockpulse-main .
+          docker build -t llmstockpulse .

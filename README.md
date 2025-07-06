@@ -23,6 +23,7 @@ An intelligent financial assistant that combines **LLMs**, **LangChain**, **Stre
 - **Error boundaries**: Graceful error handling with user-friendly messages
 - **API key validation**: Startup validation of required environment variables
 - **Safe type conversion**: Robust handling of API data types
+- **CI/CD pipeline**: Automated tests and Docker build via GitHub Actions
 
 ### 🎨 UI/UX Improvements
 - **Enhanced interface**: Better visual design with custom CSS
@@ -64,8 +65,8 @@ An intelligent financial assistant that combines **LLMs**, **LangChain**, **Stre
 
 ### 1. Clone Repository
 ```bash
-git clone https://github.com/your-repo/stock-insight-app.git
-cd stock-insight-app
+git clone https://github.com/Aashay98/LLMStockPulse-main.git
+cd LLMStockPulse-main
 ```
 
 ### 2. Environment Setup
@@ -195,6 +196,13 @@ The application includes comprehensive error handling:
 3. Make your changes with proper testing
 4. Update documentation
 5. Submit a pull request
+
+## 🚀 CI/CD
+
+Continuous integration is handled by GitHub Actions. The workflow in
+`.github/workflows/ci.yml` installs dependencies, runs static checks with
+`python -m py_compile`, and builds the Docker image on every push or pull
+request.
 
 ## 📄 License
 

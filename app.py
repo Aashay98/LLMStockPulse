@@ -12,7 +12,14 @@ import config
 from agents import *
 from database import init_db, verify_user
 from log_config import configure_logging
-from storage import append_history, clear_history, load_history, load_relevant_history
+from storage import (
+    append_history,
+    clear_history,
+    create_conversation,
+    get_conversations,
+    load_history,
+    load_relevant_history,
+)
 from utils import (
     classify_query,
     diff_text,
@@ -30,7 +37,18 @@ def login_screen() -> None:
         if verify_user(username, password):
             st.session_state.authenticated = True
             st.session_state.user_id = username
-            st.session_state.conversation_history = load_history(username)
+            convs = get_conversations(username)
+            if not convs:
+                conv_id = create_conversation(username, "Chat 1")
+                convs = get_conversations(username)
+                st.session_state.current_conversation = conv_id
+            else:
+                st.session_state.current_conversation = convs[0]["id"]
+            st.session_state.conversations = convs
+            st.session_state.conversation_history = load_history(
+                username,
+                st.session_state.current_conversation,
+            )
             st.success("Logged in!")
             st.rerun()
         else:
@@ -152,6 +170,8 @@ def initialize_session_state():
         "regen_requested": False,
         "authenticated": False,
         "user_id": "",
+        "current_conversation": None,
+        "conversations": [],
     }
 
     for key, default_value in defaults.items():
@@ -159,9 +179,14 @@ def initialize_session_state():
             st.session_state[key] = default_value
 
     # Load persistent conversation history if available
-    if not st.session_state["conversation_history"] and st.session_state.get("user_id"):
+    if (
+        not st.session_state["conversation_history"]
+        and st.session_state.get("user_id")
+        and st.session_state.get("current_conversation") is not None
+    ):
         st.session_state["conversation_history"] = load_history(
-            st.session_state["user_id"]
+            st.session_state["user_id"],
+            st.session_state["current_conversation"],
         )
 
     # Initialize memories for each agent
@@ -273,7 +298,10 @@ def multi_agent_query(query: str) -> str:
         # Retrieve relevant context from persistent history
         user_id = st.session_state.get("user_id", "default")
         context_entries = load_relevant_history(
-            user_id, query, config.MEMORY_WINDOW_SIZE
+            user_id,
+            st.session_state.get("current_conversation"),
+            query,
+            config.MEMORY_WINDOW_SIZE,
         )
         context_text = "\n".join(
             f"{e['role']}: {e['content']}" for e in context_entries
@@ -437,6 +465,7 @@ def approve_hitl_response(user_query: str):
                 {"role": "assistant", "content": final_response},
             ],
             st.session_state.get("user_id", "default"),
+            st.session_state.get("current_conversation"),
         )
 
         st.session_state.latest_response = final_response
@@ -488,12 +517,66 @@ def display_sidebar():
         # Conversation management
         st.markdown("---")
         st.markdown("## 💬 Conversation")
+        conv_opts = {
+            c["title"]: c["id"] for c in st.session_state.get("conversations", [])
+        }
+        if conv_opts:
+            titles = list(conv_opts.keys())
+            current_id = st.session_state.get("current_conversation")
+            try:
+                index = list(conv_opts.values()).index(current_id)
+            except ValueError:
+                index = 0
+            selected_title = st.selectbox("Select chat", titles, index=index)
+            selected_id = conv_opts[selected_title]
+            if selected_id != current_id:
+                st.session_state.current_conversation = selected_id
+                st.session_state.conversation_history = load_history(
+                    st.session_state.user_id,
+                    selected_id,
+                )
+                for mkey in [
+                    "stock_memory",
+                    "sentiment_memory",
+                    "social_memory",
+                    "insights_memory",
+                    "general_memory",
+                ]:
+                    st.session_state[mkey] = ConversationBufferWindowMemory(
+                        k=config.MEMORY_WINDOW_SIZE,
+                        return_messages=True,
+                        memory_key="chat_history",
+                    )
+                st.rerun()
+
+        if st.button("➕ New Chat"):
+            new_title = f"Chat {len(conv_opts) + 1}"
+            new_id = create_conversation(st.session_state.user_id, new_title)
+            st.session_state.conversations.append({"id": new_id, "title": new_title})
+            st.session_state.current_conversation = new_id
+            st.session_state.conversation_history = []
+            for mkey in [
+                "stock_memory",
+                "sentiment_memory",
+                "social_memory",
+                "insights_memory",
+                "general_memory",
+            ]:
+                st.session_state[mkey] = ConversationBufferWindowMemory(
+                    k=config.MEMORY_WINDOW_SIZE,
+                    return_messages=True,
+                    memory_key="chat_history",
+                )
+            st.rerun()
 
         if st.button("🗑️ Clear History", help="Clear all conversation history"):
             st.session_state.conversation_history = []
             st.session_state.latest_response = ""
             st.session_state.last_user_query = ""
-            clear_history(st.session_state.get("user_id", "default"))
+            clear_history(
+                st.session_state.get("user_id", "default"),
+                st.session_state.get("current_conversation"),
+            )
             st.success("Conversation history cleared!")
 
         # HITL log viewer
@@ -639,6 +722,7 @@ def main():
                     append_history(
                         response_dict,
                         st.session_state.get("user_id", "default"),
+                        st.session_state.get("current_conversation"),
                     )
                     st.session_state.latest_response = generated_response
 

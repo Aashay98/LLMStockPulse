@@ -2,155 +2,222 @@
 
 An intelligent financial assistant that combines **LLMs**, **LangChain**, **Streamlit**, and powerful real-time APIs to deliver actionable stock insights. This multi-agent app acts like a **personal stock analyst**, capable of understanding financial queries, routing them to specialized agents, and responding with structured, up-to-date insights.
 
-Whether you're an investor, analyst, or market enthusiast, this app simplifies research and decision-making by blending:
+## 🚀 Recent Improvements (v2.0)
 
-- 🔍 **Live financial data**
-- 🧠 **AI-driven analysis**
-- 💬 **Conversational interface**
+### 🐛 Bug Fixes
+- **Enhanced error handling**: Comprehensive exception handling across all modules
+- **API validation**: Proper validation of API responses and error messages
+- **Memory management**: Fixed memory initialization and context saving
+- **Stock symbol validation**: Added proper validation for stock ticker symbols
+- **Rate limiting**: Implemented retry logic with exponential backoff
 
----
+### ⚡ Performance Enhancements
+- **Caching**: Added `@st.cache_resource` for expensive operations
+- **Async processing**: Improved concurrent URL processing
+- **Token management**: Better text trimming and token counting
+- **Response formatting**: Enhanced data presentation and readability
 
-## 🧠 Concepts Used
+### 🛡️ Security & Reliability
+- **Input validation**: Comprehensive validation for all user inputs
+- **Error boundaries**: Graceful error handling with user-friendly messages
+- **API key validation**: Startup validation of required environment variables
+- **Safe type conversion**: Robust handling of API data types
+- **CI/CD pipeline**: Automated tests and Docker build via GitHub Actions
 
-This project demonstrates practical application of several modern AI, NLP, and full-stack engineering concepts:
+### 🎨 UI/UX Improvements
+- **Enhanced interface**: Better visual design with custom CSS
+- **Progress indicators**: Loading spinners for better user feedback
+- **Quick actions**: Pre-defined query buttons for common requests
+- **Session statistics**: Real-time metrics and error tracking
+- **Improved HITL**: Better human-in-the-loop review interface
 
-- **Multi-Agent Architecture**: Specialized agents coordinate via LangChain to handle different task types (e.g., stock data, sentiment, RAG insights)
-- **Tool Calling via LangChain**: LLMs interact with Python tools using LangChain's structured output & tool calling APIs
-- **Human-in-the-Loop (HITL)**: Integrated editing and approval interface for user-reviewed model outputs
-- **Retrieval-Augmented Generation (RAG)**: External knowledge is pulled using Tavily + FAISS + Sentence-BERT to enhance LLM context
-- **Token Management**: Long input content is trimmed and encoded using `tiktoken` to fit LLM input limits
-- **Caching & Performance**: `@st.cache_data` caches API responses and reduces latency for repeated queries
-- **UI/UX with Streamlit**: Interactive UI replicating ChatGPT behavior using `st.chat_input`, expandable sections, and real-time edits
+## 🧠 Architecture Overview
 
----
+### Multi-Agent System
+- **Stock Data Agent**: Real-time prices, fundamentals, technical indicators
+- **Sentiment Agent**: News analysis and market sentiment
+- **Social Sentiment Agent**: Reddit/Twitter discussions analysis
+- **Insights Agent**: Web research and comprehensive analysis
+- **General Agent**: Handles diverse financial queries
+- **Coordinator Agent**: Manages multi-agent interactions
 
-## 💼 What It Can Do
-
-- Track **real-time stock prices** (intraday & daily)
-- Retrieve **fundamentals** and **financial statements**
-- Analyze **technical indicators** (like RSI)
-- Generate **buy/hold/sell** recommendations
-- Detect **market sentiment** from news sources
-- Extract **insights from the web**
-- Handle **complex financial queries** through agent collaboration
-
----
-
-## 🚀 Features
-
-### 📈 Stock Data & Analysis
-- Intraday prices, daily trends, and company fundamentals via **Alpha Vantage**
-- RSI and MACD indicators for technical analysis
-- Financial reports like **income statements**
-- Agent-powered **buy/hold/sell** logic based on P/E, RSI, and sentiment
-
-### 📰 Sentiment Analysis
-- Recent news headlines and sentiment via **Alpha Vantage** and **NewsAPI**
-- Summary of tone and implications from financial media
-
-### 🌐 Insights & RAG
-- Web search using **Tavily API**
-- Content extraction using **BeautifulSoup**
-- Embedded similarity search with **FAISS** and **Sentence-BERT**
-- Retrieve top web insights and summarize them intelligently
-
-### 🤖 Multi-Agent LLM System
-Specialized agents using **LangChain Tool Calling**:
-- `Stock Data Agent`: Prices, indicators, fundamentals, recommendations
-- `Sentiment Agent`: News sentiment and trends
-- `Insights Agent`: Web search and summarization
-- `General Agent`: Handles any query using Tavily search
-
-### 🧠 Smart Query Classification
-Automatically detects whether your query is:
-- Stock-specific
-- Sentiment-oriented
-- General (or multiple)
-Routes it to the right agents for a coordinated response.
-
----
+### Key Features
+- 🔍 **Real-time stock data** via Alpha Vantage API
+- 📰 **News sentiment analysis** from multiple sources
+- 📣 **Social media sentiment** from Reddit and Twitter
+- 🧠 **AI-powered insights** using advanced LLMs
+- 🤖 **Human-in-the-loop** review and editing
+- 📊 **Technical analysis** with RSI, MACD indicators
+- 💡 **Investment recommendations** based on multiple factors
 
 ## 🛠️ Tech Stack
 
-- [LangChain](https://www.langchain.com/)
-- [Streamlit](https://streamlit.io/)
-- [Alpha Vantage API](https://www.alphavantage.co/)
-- [NewsAPI](https://newsapi.org/)
-- [Tavily Search API](https://docs.tavily.com/)
-- [Groq](https://groq.com/) (uses `Llama`)
-- [BeautifulSoup](https://pypi.org/project/beautifulsoup4/)
-- [Sentence-Transformers](https://www.sbert.net/)
-- [FAISS](https://faiss.ai/)
-- Python `asyncio`, `os`, `requests`
-
----
+- **Frontend**: Streamlit with custom CSS
+- **LLM**: Groq (Llama 3.3 70B)
+- **Framework**: LangChain for agent orchestration
+- **APIs**: Alpha Vantage, NewsAPI, Tavily Search, Twitter/X
+- **ML**: Sentence Transformers, FAISS for similarity search
+- **Data**: BeautifulSoup for web scraping
+- **Storage**: PostgreSQL database storing conversation history as vector embeddings
 
 ## 🔧 Setup & Installation
 
-### 1. Clone the Repository
+### 1. Clone Repository
 ```bash
-git clone https://github.com/Aashay98/LLMStockPulse-main.git
-cd LLMStockPulse-main
+git clone https://github.com/Aashay98/LLMStockPulse.git
+cd LLMStockPulse
 ```
 
-### 2. Create and Activate a Virtual Environment
+### 2. Environment Setup
 ```bash
 python -m venv venv
-```
-Windows:
-```bash
-venv\Scripts\activate
-```
-Linux/macOS:
-```bash
-source venv/bin/activate
-```
-
-### 3. Install Dependencies
-```bash
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 4. Set Environment Variables
-You’ll be prompted at runtime, or you can set them manually:
-```bash
-export GROQ_API_KEY="your_groq_api_key"
-export TAVILY_API_KEY="your_tavily_api_key"
-export NEWS_API_KEY="your_newsapi_key"
-export ALPHA_VANTAGE_API_KEY="your_alpha_vantage_key"
+### 3. Environment Variables
+Create a `.env` file with your API keys:
+```env
+GROQ_API_KEY=your_groq_api_key
+ALPHA_VANTAGE_API_KEY=your_alpha_vantage_key
+NEWS_API_KEY=your_newsapi_key
+TAVILY_API_KEY=your_tavily_key
+TWITTER_BEARER_TOKEN=your_twitter_bearer_token
+# Optional Pushshift token for Reddit data
+REDDIT_BEARER_TOKEN=your_reddit_bearer_token
+# Optional user login ("username:password" pairs)
+USER_CREDENTIALS=admin:admin
+# API limit overrides (defaults shown)
+ALPHA_VANTAGE_DAILY_LIMIT=25
+NEWSAPI_MONTHLY_LIMIT=1000
+TAVILY_MONTHLY_LIMIT=1000
+GROQ_DAILY_LIMIT=1000
+TWITTER_DAILY_LIMIT=300
+# Optional runtime settings (defaults shown)
+MAX_AGENT_ITERATIONS=10
+MEMORY_WINDOW_SIZE=5
 ```
-Or use a `.env` file with `python-dotenv`.
+`MAX_AGENT_ITERATIONS` controls how many times an agent may run per query.
+`MEMORY_WINDOW_SIZE` sets the number of recent messages each agent retains.
 
----
-
-## ▶️ How to Run
-
+### 4. Run Application
 ```bash
-python -m streamlit run Stock.py
+streamlit run app.py
 ```
 
-This will launch a browser window with a chatbot interface for asking financial questions.
+## 📋 API Requirements
 
----
+### Required API Keys
+1. **Groq API**: For LLM processing - [Get API Key](https://console.groq.com/)
+2. **Alpha Vantage**: For stock data - [Get API Key](https://www.alphavantage.co/support/#api-key)
+3. **NewsAPI**: For news data - [Get API Key](https://newsapi.org/register)
+4. **Tavily**: For web search - [Get API Key](https://tavily.com/)
+5. **Twitter/X**: For social sentiment - requires Bearer Token
 
-## 💬 Example Questions
+Reddit data is fetched via the Pushshift API. A token is optional and can be
+set with `REDDIT_BEARER_TOKEN` for higher request limits.
 
-- "Analyze Tesla stock and provide a recommendation."
-- "What is the sentiment around Nvidia this week?"
-- "Give me the latest financials of Apple."
-- "Should I invest in Google based on current metrics?"
-- "What's the market outlook for the semiconductor sector?"
+### API Limits
+- Alpha Vantage: 25 requests/day (free tier)
+- NewsAPI: 1000 requests/month (free tier)
+- Tavily: 1000 requests/month (free tier)
+- Groq: Generous free tier with high rate limits
+- Twitter/X: subject to standard API usage limits
 
----
+## 💬 Example Queries
 
-## ⚠️ Notes
-- Make sure your API keys are active and within rate limits.
-- Tavily and Alpha Vantage have limited free-tier usage.
-- This app uses **Groq's llama model** via LangChain for better performance and speed.
+### Stock Analysis
+- "Analyze AAPL stock performance and provide investment recommendation"
+- "Compare TSLA vs NVDA fundamentals"
+- "What's the current P/E ratio and RSI for Microsoft?"
 
----
+### Market Sentiment
+- "What's the market sentiment around Tesla this week?"
+- "Analyze recent news impact on tech stocks"
+- "How is the market reacting to recent Fed announcements?"
+
+### General Financial
+- "Best dividend stocks for 2024"
+- "Explain the current market volatility"
+- "Should I invest in AI stocks now?"
+
+## 🔍 Features Deep Dive
+
+### Human-in-the-Loop (HITL)
+- Review AI responses before they're added to conversation
+- Edit and improve responses for accuracy
+- Track editing history and patterns
+- Conversation history persisted on disk (cleared via sidebar button)
+- Toggle between automatic and review modes
+- Conversation history stored as vector embeddings in PostgreSQL (cleared via sidebar button)
+
+
+### Multi-Agent Coordination
+- Intelligent query classification
+- Parallel agent execution for comprehensive analysis
+- Response synthesis from multiple sources
+- Fallback mechanisms for reliability
+
+### Advanced Analytics
+- Technical indicator analysis (RSI, MACD)
+- Fundamental analysis (P/E, Market Cap, EPS)
+- Sentiment scoring from news sources
+- Investment recommendation engine
+
+## 🚨 Error Handling
+
+The application includes comprehensive error handling:
+- API rate limit management
+- Network timeout handling
+- Invalid input validation
+- Graceful degradation when services are unavailable
+- User-friendly error messages
+
+## 📊 Monitoring & Logging
+
+- Session statistics tracking
+- Error count monitoring
+- Query classification metrics
+- HITL edit logging
+- Performance monitoring
+- File logging to `app.log`
+
+## 🔒 Security Considerations
+
+- API key validation at startup
+- Input sanitization and validation
+- Safe type conversions
+- Error message sanitization
+- No sensitive data logging
+- Passwords stored securely using bcrypt hashes
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes with proper testing
+4. Update documentation
+5. Submit a pull request
+
+## 🚀 CI/CD
+
+Continuous integration is handled by GitHub Actions. The workflow in
+`.github/workflows/ci.yml` installs dependencies, runs static checks with
+`python -m py_compile`, and builds the Docker image on every push or pull
+request.
 
 ## 📄 License
 
-MIT License
+MIT License - see LICENSE file for details
 
+## 🆘 Support
+
+For issues and questions:
+1. Check the error logs in the sidebar
+2. Verify all API keys are valid and have remaining quota
+3. Review the troubleshooting section
+4. Open an issue on GitHub
+
+---
+
+**Disclaimer**: This application is for educational and informational purposes only. It should not be considered as financial advice. Always consult with qualified financial professionals before making investment decisions.

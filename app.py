@@ -1,269 +1,681 @@
+import logging
+from datetime import datetime
+from typing import Dict
+
 import streamlit as st
+import torch
 from langchain.agents import AgentExecutor
-from langchain.memory import ConversationBufferMemory
+from langchain.memory import ConversationBufferWindowMemory
 from langchain_groq import ChatGroq
 
+import config
 from agents import *
-from utils import classify_query, generate_insights_prompt
-
-# Initialize LangChain's ChatGroq Model
-llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
-
-# initialize memories for each agents
-if "stock_memory" not in st.session_state:
-    st.session_state.stock_memory = ConversationBufferMemory(
-        return_messages=True, memory_key="chat_history"
-    )
-if "sentiment_memory" not in st.session_state:
-    st.session_state.sentiment_memory = ConversationBufferMemory(
-        return_messages=True, memory_key="chat_history"
-    )
-if "insights_memory" not in st.session_state:
-    st.session_state.insights_memory = ConversationBufferMemory(
-        return_messages=True, memory_key="chat_history"
-    )
-# if "general_memory" not in st.session_state:
-#     st.session_state.general_memory = ConversationBufferMemory(
-#         return_messages=True, memory_key="chat_history"
-#     )
-# initialize memories for each agents
-if "latest_response" not in st.session_state:
-    st.session_state.latest_response = ""
-if "last_user_query" not in st.session_state:
-    st.session_state.last_user_query = ""
-# initialize for hitl
-if "hitl_mode" not in st.session_state:
-    st.session_state.hitl_mode = True
-if "pending_hitl_response" not in st.session_state:
-    st.session_state.pending_hitl_response = None
-if "hitl_log" not in st.session_state:
-    st.session_state.hitl_log = []
-
-# Initialize agents (replace `llm` with your actual LLM instance)
-stock_data_agent = create_stock_data_agent(llm)
-sentiment_agent = create_sentiment_agent(llm)
-insights_agent = create_insights_agent(llm)
-general_purpose_agent = create_general_purpose_agent(llm)
-coordinator_agent = create_coordinator_agent(llm)
-
-# Agent executors
-stock_data_executor = AgentExecutor(
-    agent=stock_data_agent,
-    tools=[get_stock_data, get_stock_analysis],
-    memory=st.session_state.stock_memory,
-    verbose=True,
+from database import init_db, verify_user
+from log_config import configure_logging
+from storage import append_history, clear_history, load_history, load_relevant_history
+from utils import (
+    classify_query,
+    diff_text,
+    friendly_error_message,
+    generate_insights_prompt,
 )
-sentiment_executor = AgentExecutor(
-    agent=sentiment_agent,
-    tools=[get_market_sentiment_news, get_news_from_newsapi],
-    verbose=True,
-    memory=st.session_state.sentiment_memory,
+
+
+def login_screen() -> None:
+    """Login form that checks credentials against the database."""
+    st.markdown("## 🔐 Login")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    if st.button("Login"):
+        if verify_user(username, password):
+            st.session_state.authenticated = True
+            st.session_state.user_id = username
+            st.session_state.conversation_history = load_history(username)
+            st.success("Logged in!")
+            st.rerun()
+        else:
+            st.error("Invalid credentials")
+    st.stop()
+
+
+# Configure logging
+configure_logging()
+logger = logging.getLogger(__name__)
+
+init_db()
+
+torch.classes.__path__ = []  # add this line to manually set it to empty.
+
+# Page configuration
+st.set_page_config(
+    page_title="Stock Insight Assistant",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
-insights_executor = AgentExecutor(
-    agent=insights_agent,
-    tools=[tavily_search, process_search_tool],
-    verbose=True,
-    memory=st.session_state.insights_memory,
-)
-# general_purpose_executor = AgentExecutor(
-#     agent=general_purpose_agent,
-#     tools=[tavily_search],
-#     verbose=True,
-#     memory=st.session_state.general_memory,
-# )
-# coordinator_executor = AgentExecutor(agent=coordinator_agent, tools=[], verbose=True)
 
-
-def multi_agent_query(query):
-    # Add the user query to conversation history
-    st.session_state.conversation_history.append({"role": "user", "content": query})
-
-    responses = []
-    errors = []
-    query_type = classify_query(query)
-    print(query_type)
-
-    context = ""
-    if len(st.session_state.conversation_history) > 1:
-        previous_exchanges = st.session_state.conversation_history[
-            -5:-1
-        ]  # Get up to 4 previous exchanges
-        for exchange in previous_exchanges:
-            if exchange.get("role") == "assistant":
-                context += f"Previous response: {exchange.get('content')}\n"
-
-    # Fetch stock data if it's a stock-related query
-    if query_type in ["stock", "both"]:
-        try:
-            stock_data_response = stock_data_executor.invoke(
-                {
-                    "chat_history": st.session_state.stock_memory.load_memory_variables(
-                        {}
-                    )["chat_history"],
-                    "input": f"Retrieve the latest stock data and market trends for {query}. Provide key statistics, including open, high, low, close, and volume.",
-                }
-            )
-            responses.append(
-                f"**Stock Data Analysis**:\n{stock_data_response['output']}"
-            )
-            st.session_state.stock_memory.save_context(
-                {"input": query}, {"output": stock_data_response["output"]}
-            )
-        except Exception as e:
-            errors.append(f"❌ Stock Data Agent failed: {str(e)}")
-
-    # Fetch sentiment analysis if it's related to financial sentiment
-    if query_type in ["sentiment", "both"]:
-        try:
-            sentiment_response = sentiment_executor.invoke(
-                {
-                    "chat_history": st.session_state.sentiment_memory.load_memory_variables(
-                        {}
-                    )[
-                        "chat_history"
-                    ],
-                    "input": f"Analyze the market sentiment for {query}. Summarize the tone of recent news articles, social media discussions, and investor opinions.",
-                }
-            )
-            responses.append(f"**Sentiment Analysis**:\n{sentiment_response['output']}")
-            # Save to memory
-            st.session_state.sentiment_memory.save_context(
-                {"input": query}, {"output": sentiment_response["output"]}
-            )
-        except Exception as e:
-            errors.append(f"❌ Sentiment Agent failed: {str(e)}")
-
-    # Step 3: Generate insights (generic input)e
-    if query_type in ["stock", "sentiment", "both", "general"]:
-        try:
-            insights_prompt = generate_insights_prompt(query, query_type)
-            insights_response = insights_executor.invoke(
-                {
-                    "chat_history": st.session_state.sentiment_memory.load_memory_variables(
-                        {}
-                    )[
-                        "chat_history"
-                    ],
-                    "input": insights_prompt,
-                }
-            )
-            responses.append(f"**Insights**:\n{insights_response['output']}")
-            # Save to memory
-            st.session_state.insights_memory.save_context(
-                {"input": insights_prompt}, {"output": insights_response["output"]}
-            )
-        except Exception as e:
-            errors.append(f"❌ Insights Agent failed: {str(e)}")
-
-    # Combine responses
-    final_response = "\n\n".join(responses) if responses else "No data available."
-
-    # Append errors if any agents failed
-    if errors:
-        final_response += "\n\n**Errors**:\n" + "\n".join(errors)
-    return final_response
-
-
-def display_chat_history():
-    if "conversation_history" in st.session_state:
-        for message in st.session_state.conversation_history:
-            if message["role"] == "user":
-                st.chat_message("user").write(message["content"])
-            else:
-                st.chat_message("assistant").write(message["content"])
-
-
-# Initialize session state for storing conversation history
-if "conversation_history" not in st.session_state:
-    st.session_state.conversation_history = []
-
-# Streamlit UI
-st.set_page_config(page_title="Stock Assistant", page_icon="📈")
-st.title("📈 Stock Insight Assistant")
+# Custom CSS for better UI
 st.markdown(
-    "Ask me about a stock’s fundamentals, news sentiment, or technicals. I’m multi-agent powered! 🤖"
+    """
+<style>
+    .main-header {
+        text-align: center;
+        padding: 1rem 0;
+        background: linear-gradient(90deg, #1f77b4, #ff7f0e);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-size: 2.5rem;
+        font-weight: bold;
+    }
+    .agent-response {
+        border-left: 4px solid #1f77b4;
+        padding-left: 1rem;
+        margin: 1rem 0;
+    }
+    .error-message {
+        background-color: #ffebee;
+        border-left: 4px solid #f44336;
+        padding: 1rem;
+        margin: 1rem 0;
+    }
+    .success-message {
+        background-color: #e8f5e8;
+        border-left: 4px solid #4caf50;
+        padding: 1rem;
+        margin: 1rem 0;
+    }
+    /* Chat bubbles */
+    .stChatMessage {
+        padding: 0.5rem 1rem;
+        border-radius: 1rem;
+        margin-bottom: 0.5rem;
+        max-width: 80%;
+    }
+    .stChatMessage.user {
+        background-color: var(--primary-color);
+        color: #ffffff;
+        align-self: flex-end;
+    }
+    .stChatMessage.assistant {
+        background-color: var(--secondary-background-color);
+        color: var(--text-color);
+        align-self: flex-start;
+    }
+</style>
+""",
+    unsafe_allow_html=True,
 )
 
-# -- Sidebar toggle --
-with st.sidebar:
-    st.session_state.hitl_mode = st.checkbox(
-        "🧠 Human-in-the-Loop Review", value=st.session_state.hitl_mode
+
+@st.cache_resource
+def initialize_llm():
+    """Initialize and cache the LLM."""
+    try:
+        return ChatGroq(
+            model="deepseek-r1-distill-llama-70b",
+            temperature=0,
+            api_key=config.GROQ_API_KEY,
+        )
+    except Exception as e:
+        st.error(f"Failed to initialize LLM: {e}")
+        st.stop()
+
+
+@st.cache_resource
+def initialize_agents(_llm):
+    """Initialize and cache all agents."""
+    try:
+        agents = {
+            "stock_data": create_stock_data_agent(_llm),
+            "sentiment": create_sentiment_agent(_llm),
+            "social_sentiment": create_social_sentiment_agent(_llm),
+            "insights": create_insights_agent(_llm),
+            "general": create_general_purpose_agent(_llm),
+            "coordinator": create_coordinator_agent(_llm),
+        }
+        return agents
+    except Exception as e:
+        st.error(f"Failed to initialize agents: {e}")
+        st.stop()
+
+
+def initialize_session_state():
+    """Initialize all session state variables."""
+    defaults = {
+        "conversation_history": [],
+        "latest_response": "",
+        "last_user_query": "",
+        "hitl_mode": False,
+        "pending_hitl_response": None,
+        "hitl_log": [],
+        "error_count": 0,
+        "regen_requested": False,
+        "authenticated": False,
+        "user_id": "",
+    }
+
+    for key, default_value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = default_value
+
+    # Load persistent conversation history if available
+    if not st.session_state["conversation_history"] and st.session_state.get("user_id"):
+        st.session_state["conversation_history"] = load_history(
+            st.session_state["user_id"]
+        )
+
+    # Initialize memories for each agent
+    memory_keys = [
+        "stock_memory",
+        "sentiment_memory",
+        "social_memory",
+        "insights_memory",
+        "general_memory",
+    ]
+    for memory_key in memory_keys:
+        if memory_key not in st.session_state:
+            st.session_state[memory_key] = ConversationBufferWindowMemory(
+                k=config.MEMORY_WINDOW_SIZE,
+                return_messages=True,
+                memory_key="chat_history",
+            )
+
+
+def create_agent_executors(agents: Dict, memories: Dict) -> Dict[str, AgentExecutor]:
+    """Create agent executors with proper tool assignments."""
+    from tools import (
+        get_market_sentiment_news,
+        get_news_from_newsapi,
+        get_social_sentiment,
+        get_stock_analysis,
+        get_stock_data,
+        process_search_tool,
+        tavily_search,
     )
 
+    executors = {
+        "stock_data": AgentExecutor(
+            agent=agents["stock_data"],
+            tools=[get_stock_data, get_stock_analysis],
+            memory=memories["stock_memory"],
+            verbose=True,
+            handle_parsing_errors=True,
+            max_iterations=config.MAX_AGENT_ITERATIONS,
+        ),
+        "sentiment": AgentExecutor(
+            agent=agents["sentiment"],
+            tools=[get_market_sentiment_news, get_news_from_newsapi],
+            memory=memories["sentiment_memory"],
+            verbose=True,
+            handle_parsing_errors=True,
+            max_iterations=config.MAX_AGENT_ITERATIONS,
+        ),
+        "social_sentiment": AgentExecutor(
+            agent=agents["social_sentiment"],
+            tools=[get_social_sentiment],
+            memory=memories["social_memory"],
+            verbose=True,
+            handle_parsing_errors=True,
+            max_iterations=config.MAX_AGENT_ITERATIONS,
+        ),
+        "insights": AgentExecutor(
+            agent=agents["insights"],
+            tools=[tavily_search, process_search_tool],
+            memory=memories["insights_memory"],
+            verbose=True,
+            handle_parsing_errors=True,
+            max_iterations=config.MAX_AGENT_ITERATIONS,
+        ),
+        "general": AgentExecutor(
+            agent=agents["general"],
+            tools=[tavily_search],
+            memory=memories["general_memory"],
+            verbose=True,
+            handle_parsing_errors=True,
+            max_iterations=config.MAX_AGENT_ITERATIONS,
+        ),
+    }
 
-# -- HITL approval function with logging --
-def approve_hitl_response(user_query):
-    final_response = st.session_state.hitl_edit_box
-    original_response = st.session_state.pending_hitl_response
+    return executors
 
-    # Log the edit
-    if final_response != original_response:
+
+def execute_agent_safely(executor: AgentExecutor, input_data: Dict) -> Dict[str, str]:
+    """Execute agent with proper error handling."""
+    try:
+        from rate_limit import check_api_usage
+
+        check_api_usage("groq")
+        result = executor.invoke(input_data)
+        return {"success": True, "output": result.get("output", "No output generated")}
+    except Exception as e:
+        logger.error(f"Agent execution failed: {e}")
+        return {"success": False, "error": friendly_error_message(str(e))}
+
+
+def multi_agent_query(query: str) -> str:
+    """Enhanced multi-agent query processing with better error handling."""
+    try:
+
+        # Initialize components
+        llm = initialize_llm()
+        agents = initialize_agents(llm)
+
+        memories = {
+            "stock_memory": st.session_state.stock_memory,
+            "sentiment_memory": st.session_state.sentiment_memory,
+            "social_memory": st.session_state.social_memory,
+            "insights_memory": st.session_state.insights_memory,
+            "general_memory": st.session_state.general_memory,
+        }
+
+        executors = create_agent_executors(agents, memories)
+
+        # Retrieve relevant context from persistent history
+        user_id = st.session_state.get("user_id", "default")
+        context_entries = load_relevant_history(
+            user_id, query, config.MEMORY_WINDOW_SIZE
+        )
+        context_text = "\n".join(
+            f"{e['role']}: {e['content']}" for e in context_entries
+        )
+        context_prefix = f"{context_text}\n\n" if context_text else ""
+
+        # Classify query and determine which agents to use
+        query_type = classify_query(query)
+        logger.info(f"Query classified as: {query_type}")
+
+        responses = []
+        errors = []
+
+        # Execute appropriate agents based on query type
+        if query_type in ["stock", "both"]:
+            with st.spinner("🔍 Analyzing stock data..."):
+                result = execute_agent_safely(
+                    executors["stock_data"],
+                    {
+                        "chat_history": memories["stock_memory"].load_memory_variables(
+                            {}
+                        )["chat_history"],
+                        "input": f"{context_prefix}Provide comprehensive stock analysis for: {query}",
+                    },
+                )
+
+                if result["success"]:
+                    responses.append(f"## 📈 Stock Data Analysis\n{result['output']}")
+                    memories["stock_memory"].save_context(
+                        {"input": query}, {"output": result["output"]}
+                    )
+                else:
+                    errors.append(f"❌ Stock Analysis failed: {result['error']}")
+
+        if query_type in ["sentiment", "both"]:
+            with st.spinner("📰 Analyzing market sentiment..."):
+                result = execute_agent_safely(
+                    executors["sentiment"],
+                    {
+                        "chat_history": memories[
+                            "sentiment_memory"
+                        ].load_memory_variables({})["chat_history"],
+                        "input": f"{context_prefix}Analyze market sentiment and news for: {query}",
+                    },
+                )
+
+                if result["success"]:
+                    responses.append(f"## Sentiment Analysis\n{result['output']}")
+                    memories["sentiment_memory"].save_context(
+                        {"input": query}, {"output": result["output"]}
+                    )
+                else:
+                    errors.append(f"❌ Sentiment Analysis failed: {result['error']}")
+
+            with st.spinner("📣 Gathering social media sentiment..."):
+                result = execute_agent_safely(
+                    executors["social_sentiment"],
+                    {
+                        "chat_history": memories["social_memory"].load_memory_variables(
+                            {}
+                        )["chat_history"],
+                        "input": f"{context_prefix}Summarize social media sentiment for: {query}",
+                    },
+                )
+
+                if result["success"]:
+                    responses.append(f"## 🗣️ Social Sentiment\n{result['output']}")
+                    memories["social_memory"].save_context(
+                        {"input": query}, {"output": result["output"]}
+                    )
+                else:
+                    errors.append(f"❌ Social Sentiment failed: {result['error']}")
+
+        # Always generate insights for comprehensive analysis
+        if query_type in ["stock", "sentiment", "both", "general"]:
+            with st.spinner("� Generating insights..."):
+                insights_prompt = generate_insights_prompt(query, query_type)
+                result = execute_agent_safely(
+                    executors["insights"],
+                    {
+                        "chat_history": memories[
+                            "insights_memory"
+                        ].load_memory_variables({})["chat_history"],
+                        "input": f"{context_prefix}{insights_prompt}",
+                    },
+                )
+
+                if result["success"]:
+                    responses.append(f"## Market Insights\n{result['output']}")
+                    memories["insights_memory"].save_context(
+                        {"input": insights_prompt}, {"output": result["output"]}
+                    )
+                else:
+                    errors.append(f"❌ Insights Generation failed: {result['error']}")
+
+        # Combine responses
+        if responses:
+            final_response = "\n\n".join(responses)
+        else:
+            # Fallback to general agent if all specialized agents fail
+            with st.spinner("🤖 Processing with general assistant..."):
+                result = execute_agent_safely(
+                    executors["general"],
+                    {
+                        "chat_history": memories[
+                            "general_memory"
+                        ].load_memory_variables({})["chat_history"],
+                        "input": f"{context_prefix}{query}",
+                    },
+                )
+
+                if result["success"]:
+                    final_response = f"## 🤖 General Analysis\n{result['output']}"
+                else:
+                    final_response = "❌ I apologize, but I'm unable to process your request at the moment. Please try again later."
+
+        # Append errors if any
+        if errors:
+            st.session_state.error_count += len(errors)
+            final_response += f"\n\n## ⚠️ Warnings\n" + "\n".join(errors)
+
+        return final_response
+
+    except Exception as e:
+        logger.error(f"Multi-agent query failed: {e}")
+        st.session_state.error_count += 1
+        return f"❌ An unexpected error occurred: {str(e)}\n\nPlease try rephrasing your question or contact support if the issue persists."
+
+
+def approve_hitl_response(user_query: str):
+    """Process HITL approval with logging."""
+    try:
+        final_response = st.session_state.hitl_edit_box
+        original_response = st.session_state.pending_hitl_response
+
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        diff = diff_text(original_response, final_response)
+
         st.session_state.hitl_log.append(
             {
                 "query": user_query,
                 "original_response": original_response,
                 "edited_response": final_response,
+                "timestamp": timestamp,
+                "status": "approved",
+                "diff": diff,
             }
         )
 
-    st.session_state.conversation_history.append(
-        {"role": "user", "content": user_query}
+        # Add to conversation history
+        st.session_state.conversation_history.extend(
+            [
+                {"role": "user", "content": user_query},
+                {"role": "assistant", "content": final_response},
+            ]
+        )
+        # Persist to storage
+        append_history(
+            [
+                {"role": "user", "content": user_query},
+                {"role": "assistant", "content": final_response},
+            ],
+            st.session_state.get("user_id", "default"),
+        )
+
+        st.session_state.latest_response = final_response
+        st.session_state.pending_hitl_response = None
+
+        # Show success message
+        st.success("✅ Response approved and added to conversation!")
+
+    except Exception as e:
+        st.error(f"Error approving response: {e}")
+
+
+def reject_hitl_response(user_query: str):
+    """Discard the pending response and log the action."""
+    try:
+        st.session_state.hitl_log.append(
+            {
+                "query": user_query,
+                "original_response": st.session_state.pending_hitl_response,
+                "edited_response": None,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "status": "rejected",
+                "diff": "",
+            }
+        )
+        st.session_state.pending_hitl_response = None
+        st.warning("❌ Response rejected and discarded.")
+    except Exception as e:
+        st.error(f"Error rejecting response: {e}")
+
+
+def display_sidebar():
+    """Display enhanced sidebar with controls and statistics."""
+    with st.sidebar:
+        st.markdown(f"**User:** {st.session_state.get('user_id','guest')}")
+        if st.button("Logout"):
+            st.session_state.authenticated = False
+            st.session_state.user_id = ""
+            st.rerun()
+        st.markdown("## 🎛️ Controls")
+
+        # HITL toggle
+        st.session_state.hitl_mode = st.checkbox(
+            "🧠 Human-in-the-Loop Review",
+            value=st.session_state.hitl_mode,
+            help="Review and edit AI responses before they're added to the conversation",
+        )
+
+        # Conversation management
+        st.markdown("---")
+        st.markdown("## 💬 Conversation")
+
+        if st.button("🗑️ Clear History", help="Clear all conversation history"):
+            st.session_state.conversation_history = []
+            st.session_state.latest_response = ""
+            st.session_state.last_user_query = ""
+            clear_history(st.session_state.get("user_id", "default"))
+            st.success("Conversation history cleared!")
+
+        # HITL log viewer
+        if st.session_state.hitl_log and st.checkbox("🔍 View HITL Edit Log"):
+            st.markdown("### Recent HITL Actions")
+            for i, entry in enumerate(reversed(st.session_state.hitl_log[-5:]), 1):
+                label = "Edit" if entry.get("status") == "approved" else "Reject"
+                with st.expander(f"{label} {i}: {entry['query'][:30]}..."):
+                    st.markdown(f"**Timestamp:** {entry.get('timestamp','')}  ")
+                    if entry.get("status") == "rejected":
+                        st.markdown("Response was rejected.")
+                        st.text_area(
+                            "Original",
+                            entry.get("original_response", ""),
+                            height=100,
+                            key=f"orig_{i}",
+                            disabled=True,
+                        )
+                    else:
+                        st.markdown("**Original:**")
+                        st.text_area(
+                            "",
+                            entry.get("original_response", ""),
+                            height=100,
+                            key=f"orig_{i}",
+                            disabled=True,
+                        )
+                        st.markdown("**Final:**")
+                        st.text_area(
+                            "",
+                            entry.get("edited_response", ""),
+                            height=100,
+                            key=f"edit_{i}",
+                            disabled=True,
+                        )
+                        if entry.get("diff"):
+                            st.markdown("**Changes:**")
+                            st.code(entry["diff"], language="diff")
+
+
+def main():
+    """Main application function."""
+    # Initialize session state
+    initialize_session_state()
+    if not st.session_state.authenticated:
+        login_screen()
+    if st.session_state.pop("regen_requested", False):
+        try:
+            new_resp = multi_agent_query(st.session_state.last_user_query)
+        except Exception as e:
+            logger.error(f"Regenerate failed: {e}")
+            new_resp = f"❌ Regenerate failed: {e}"
+        st.session_state.pending_hitl_response = new_resp
+        st.session_state.hitl_edit_box = new_resp
+
+    # Display header
+    st.markdown(
+        '<h1 class="main-header">Stock Insight Assistant</h1>',
+        unsafe_allow_html=True,
     )
-    st.session_state.conversation_history.append(
-        {"role": "assistant", "content": final_response}
+    st.markdown(
+        "Ask me about stock fundamentals, market sentiment, technical analysis, or general financial questions. "
+        "I'm powered by multiple specialized AI agents! 🤖"
     )
-    st.session_state.latest_response = final_response
-    st.session_state.pending_hitl_response = None
+
+    # Display sidebar
+    display_sidebar()
+
+    # Main chat interface
+    col1, col2 = st.columns([3, 1])
+
+    with col1:
+
+        if st.session_state.conversation_history:
+            for message in st.session_state.conversation_history:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+
+        # Chat input
+        user_query = st.chat_input(
+            "What would you like to know about the markets today?",
+            key="main_chat_input",
+        )
+
+        # Process user input
+        if user_query and user_query.strip():
+            st.session_state.last_user_query = user_query
+
+            # Display user message
+            with st.chat_message("user"):
+                st.write(user_query)
+
+            # Generate response
+            with st.chat_message("assistant"):
+                generated_response = multi_agent_query(user_query)
+
+                if st.session_state.hitl_mode:
+                    # HITL mode - show draft for review
+                    st.session_state.pending_hitl_response = generated_response
+                    st.session_state.hitl_edit_box = generated_response
+
+                    st.markdown("### 💡 Review Assistant's Draft Response")
+                    st.info(
+                        "Please review and edit the response below if needed, then click 'Approve' to add it to the conversation."
+                    )
+
+                    # Editable response
+                    edited_response = st.text_area(
+                        "Edit the response if needed:",
+                        height=400,
+                        key="hitl_edit_box",
+                    )
+
+                    col_approve, col_regenerate, col_reject = st.columns([1, 1, 1])
+                    with col_approve:
+                        if st.button("✅ Approve & Send", type="primary"):
+                            approve_hitl_response(user_query)
+                            st.rerun()
+
+                    with col_regenerate:
+                        if st.button("🔄 Regenerate Response"):
+                            st.session_state.regen_requested = True
+                            new_response = multi_agent_query(
+                                st.session_state.last_user_query
+                            )
+                            st.session_state.pending_hitl_response = new_response
+                            st.session_state.hitl_edit_box = new_response
+                            st.rerun()
+                    with col_reject:
+                        if st.button("🗑️ Reject"):
+                            reject_hitl_response(user_query)
+                            st.rerun()
+                else:
+                    # Direct mode - show response immediately
+                    st.markdown(generated_response)
+                    response_dict = [
+                        {"role": "user", "content": user_query},
+                        {"role": "assistant", "content": generated_response},
+                    ]
+                    # Add to conversation history
+                    st.session_state.conversation_history.extend(response_dict)
+                    # Persist to storage
+                    append_history(
+                        response_dict,
+                        st.session_state.get("user_id", "default"),
+                    )
+                    st.session_state.latest_response = generated_response
+
+        elif st.session_state.hitl_mode and st.session_state.pending_hitl_response:
+            # Show pending response (e.g., after regeneration)
+            with st.chat_message("assistant"):
+                st.markdown("### 💡 Review Assistant's Draft Response")
+                st.info(
+                    "Please review and edit the response below if needed, then click 'Approve' to add it to the conversation."
+                )
+
+                edited_response = st.text_area(
+                    "Edit the response if needed:",
+                    height=400,
+                    key="hitl_edit_box",
+                )
+
+                col_approve, col_regenerate, col_reject = st.columns([1, 1, 1])
+                with col_approve:
+                    if st.button("✅ Approve & Send", type="primary"):
+                        approve_hitl_response(st.session_state.last_user_query)
+                        st.rerun()
+
+                with col_regenerate:
+                    if st.button("🔄 Regenerate Response"):
+                        st.session_state.regen_requested = True
+                        st.rerun()
+
+                with col_reject:
+                    if st.button("🗑️ Reject"):
+                        reject_hitl_response(st.session_state.last_user_query)
+                        st.rerun()
 
 
-# -- Main input and output display logic with HITL injection --
-user_query = st.chat_input(
-    "Which stock do you want to know about today?", key="stock_question"
-)
-
-if user_query and user_query.strip():
-    st.chat_message("user").write(user_query)
-    st.session_state.last_user_query = user_query
-
-    with st.chat_message("assistant"):
-        with st.spinner("Analyzing your query..."):
-            generated_response = multi_agent_query(user_query)
-
-        if st.session_state.hitl_mode:
-            st.session_state.pending_hitl_response = generated_response
-            st.markdown("#### 💡 Review Assistant's Draft Response:")
-            st.text_area(
-                "Edit the response if needed",
-                value=generated_response,
-                key="hitl_edit_box",
-                height=300,
-            )
-            st.button(
-                "✅ Approve & Send to Chat",
-                on_click=lambda: approve_hitl_response(user_query),
-            )
-        else:
-            st.session_state.conversation_history.append(
-                {"role": "user", "content": user_query}
-            )
-            st.session_state.conversation_history.append(
-                {"role": "assistant", "content": generated_response}
-            )
-            st.session_state.latest_response = generated_response
-            st.markdown(generated_response)
-
-# -- Show conversation history after response --
-if "conversation_history" in st.session_state:
-    for message in st.session_state.conversation_history:
-        if message["role"] == "user":
-            st.chat_message("user").write(message["content"])
-        else:
-            st.chat_message("assistant").write(message["content"])
-
-# -- debug: view HITL log
-if st.sidebar.checkbox("🔍 View HITL Edit Log"):
-    for entry in st.session_state.hitl_log:
-        st.sidebar.markdown(f"**Query:** {entry['query']}")
-        st.sidebar.markdown(f"**Original:**\n{entry['original_response']}")
-        st.sidebar.markdown(f"**Edited:**\n{entry['edited_response']}")
-        st.sidebar.markdown("---")
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        st.error(f"Application error: {e}")
+        logger.error(f"Application error: {e}")

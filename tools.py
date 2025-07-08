@@ -4,6 +4,8 @@ from typing import Any, Dict, List
 
 import faiss
 import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
 import requests
 import streamlit as st
 from bs4 import BeautifulSoup
@@ -635,3 +637,45 @@ def _interpret_sentiment(sentiment: float) -> str:
         return "(Negative)"
     else:
         return "(Neutral)"
+
+
+def fetch_daily_prices(symbol: str) -> pd.DataFrame:
+    """Fetch daily price data for a ticker."""
+    params = {
+        "function": "TIME_SERIES_DAILY_ADJUSTED",
+        "symbol": symbol,
+        "apikey": ALPHA_VANTAGE_API_KEY,
+        "outputsize": "compact",
+    }
+    data = make_api_request(ALPHA_VANTAGE_BASE_URL, params, api_name="alpha_vantage")
+    series = data.get("Time Series (Daily)", {})
+    df = pd.DataFrame.from_dict(series, orient="index")
+    df.index = pd.to_datetime(df.index)
+    df = df.sort_index()
+    df = df.astype(float)
+    return df
+
+
+def get_price_chart(symbol: str) -> go.Figure:
+    """Return a Plotly figure of closing prices."""
+    try:
+        df = fetch_daily_prices(symbol)
+        fig = go.Figure()
+        fig.add_trace(
+            go.Scatter(x=df.index, y=df["4. close"], mode="lines", name="Close")
+        )
+        fig.update_layout(
+            title=f"{symbol} Daily Closing Prices",
+            xaxis_title="Date",
+            yaxis_title="Price (USD)",
+        )
+        return fig
+    except Exception as e:
+        fig = go.Figure()
+        fig.add_annotation(
+            text=f"Error generating chart: {e}",
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+        )
+        return fig

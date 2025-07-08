@@ -49,11 +49,8 @@ NEWS_API_BASE_URL = "https://newsapi.org/v2/everything"
 REQUEST_TIMEOUT = 10
 MAX_RETRIES = 3
 CACHE_TTL = 300  # 5 minutes
-MAX_AGENT_ITERATIONS = int(os.getenv("MAX_AGENT_ITERATIONS", 10))
+MAX_AGENT_ITERATIONS = int(os.getenv("MAX_AGENT_ITERATIONS"))
 # Number of recent messages to retain in each agent's memory window
-MEMORY_WINDOW_SIZE = int(os.getenv("MEMORY_WINDOW_SIZE", 5))
+MEMORY_WINDOW_SIZE = int(os.getenv("MEMORY_WINDOW_SIZE"))
 # SQLAlchemy database URL (e.g., postgresql+psycopg2://user:pass@host/db)
-DB_URL = os.getenv(
-    "DB_URL",
-    "postgresql+psycopg2://postgres:postgres@localhost/stockpulse",
-)
+DB_URL = os.getenv("DB_URL")

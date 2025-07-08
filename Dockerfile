@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # Use Python 3.11 to match the CI configuration
 FROM python:3.11-slim
 

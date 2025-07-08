@@ -14,8 +14,14 @@ from database import init_db
 from hitl import approve_hitl_response, reject_hitl_response
 from log_config import configure_logging
 from storage import append_history, load_history, load_relevant_history
+from tools import get_price_chart
 from ui import display_sidebar, login_screen
-from utils import classify_query, friendly_error_message, generate_insights_prompt
+from utils import (
+    classify_query,
+    extract_ticker_symbol,
+    friendly_error_message,
+    generate_insights_prompt,
+)
 
 # Configure logging
 configure_logging()
@@ -110,7 +116,6 @@ def initialize_agents(_llm):
             "social_sentiment": create_social_sentiment_agent(_llm),
             "insights": create_insights_agent(_llm),
             "general": create_general_purpose_agent(_llm),
-            "coordinator": create_coordinator_agent(_llm),
         }
         return agents
     except Exception as e:
@@ -294,6 +299,10 @@ def multi_agent_query(query: str) -> str:
                     memories["stock_memory"].save_context(
                         {"input": query}, {"output": result["output"]}
                     )
+                    symbol = extract_ticker_symbol(query)
+                    if symbol:
+                        chart = get_price_chart(symbol)
+                        st.plotly_chart(chart, use_container_width=True)
                 else:
                     errors.append(f"❌ Stock Analysis failed: {result['error']}")
 

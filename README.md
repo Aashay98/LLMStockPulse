@@ -1,6 +1,6 @@
-# 📊 Stock Insight Multi-Agent App
+# 📊 Stock Pulse LLM App
 
-An intelligent financial assistant that combines **LLMs**, **LangChain**, **Streamlit**, and powerful real-time APIs to deliver actionable stock insights. This multi-agent app acts like a **personal stock analyst**, capable of understanding financial queries, routing them to specialized agents, and responding with structured, up-to-date insights.
+An intelligent financial assistant that combines **LLMs**, **LangChain**, **Streamlit**, and powerful real-time APIs to deliver actionable stock insights. This multi-agent app acts like a **personal stock analyst**, capable of understanding financial queries, routing them to specialized agents, and responding with structured, up-to-date insights. Currently hosted with Streamlit Community:- https://llmstockpulse.streamlit.app/. Login:- admin(username)/admin(password)
 
 ## 🚀 Recent Improvements (v2.0)
 
@@ -30,6 +30,8 @@ An intelligent financial assistant that combines **LLMs**, **LangChain**, **Stre
 - **Quick actions**: Pre-defined query buttons for common requests
 - **Session statistics**: Real-time metrics and error tracking
 - **Improved HITL**: Better human-in-the-loop review interface
+- **Interactive charts**: Plotly stock price visualizations
+
 
 ## 🧠 Architecture Overview
 
@@ -49,6 +51,7 @@ An intelligent financial assistant that combines **LLMs**, **LangChain**, **Stre
 - 🤖 **Human-in-the-loop** review and editing
 - 📊 **Technical analysis** with RSI, MACD indicators
 - 💡 **Investment recommendations** based on multiple factors
+- 📈 **Interactive stock charts** with Plotly
 
 ## 🛠️ Tech Stack
 

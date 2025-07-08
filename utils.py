@@ -195,6 +195,14 @@ def diff_text(original: str, edited: str) -> str:
     return "\n".join(diff)
 
 
+def extract_ticker_symbol(text: str) -> str | None:
+    """Extract the first likely ticker symbol from text."""
+    if not text:
+        return None
+    match = re.search(r"\b[A-Z]{1,5}\b", text.upper())
+    return match.group(0) if match else None
+
+
 def friendly_error_message(error: str) -> str:
     """Provide user-friendly messages for common errors."""
     if "max iterations" in error.lower():

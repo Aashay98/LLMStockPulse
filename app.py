@@ -10,33 +10,18 @@ from langchain_groq import ChatGroq
 
 import config
 from agents import *
-from database import init_db, verify_user
+from database import init_db
+from hitl import approve_hitl_response, reject_hitl_response
 from log_config import configure_logging
-from storage import append_history, clear_history, load_history, load_relevant_history
+from storage import append_history, load_history, load_relevant_history
+from tools import get_price_chart
+from ui import display_sidebar, login_screen
 from utils import (
     classify_query,
-    diff_text,
+    extract_ticker_symbol,
     friendly_error_message,
     generate_insights_prompt,
 )
-
-
-def login_screen() -> None:
-    """Login form that checks credentials against the database."""
-    st.markdown("## 🔐 Login")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-    if st.button("Login"):
-        if verify_user(username, password):
-            st.session_state.authenticated = True
-            st.session_state.user_id = username
-            st.session_state.conversation_history = load_history(username)
-            st.success("Logged in!")
-            st.rerun()
-        else:
-            st.error("Invalid credentials")
-    st.stop()
-
 
 # Configure logging
 configure_logging()
@@ -131,7 +116,6 @@ def initialize_agents(_llm):
             "social_sentiment": create_social_sentiment_agent(_llm),
             "insights": create_insights_agent(_llm),
             "general": create_general_purpose_agent(_llm),
-            "coordinator": create_coordinator_agent(_llm),
         }
         return agents
     except Exception as e:
@@ -152,6 +136,8 @@ def initialize_session_state():
         "regen_requested": False,
         "authenticated": False,
         "user_id": "",
+        "current_conversation": None,
+        "conversations": [],
     }
 
     for key, default_value in defaults.items():
@@ -159,9 +145,14 @@ def initialize_session_state():
             st.session_state[key] = default_value
 
     # Load persistent conversation history if available
-    if not st.session_state["conversation_history"] and st.session_state.get("user_id"):
+    if (
+        not st.session_state["conversation_history"]
+        and st.session_state.get("user_id")
+        and st.session_state.get("current_conversation") is not None
+    ):
         st.session_state["conversation_history"] = load_history(
-            st.session_state["user_id"]
+            st.session_state["user_id"],
+            st.session_state["current_conversation"],
         )
 
     # Initialize memories for each agent
@@ -273,7 +264,10 @@ def multi_agent_query(query: str) -> str:
         # Retrieve relevant context from persistent history
         user_id = st.session_state.get("user_id", "default")
         context_entries = load_relevant_history(
-            user_id, query, config.MEMORY_WINDOW_SIZE
+            user_id,
+            st.session_state.get("current_conversation"),
+            query,
+            config.MEMORY_WINDOW_SIZE,
         )
         context_text = "\n".join(
             f"{e['role']}: {e['content']}" for e in context_entries
@@ -305,6 +299,10 @@ def multi_agent_query(query: str) -> str:
                     memories["stock_memory"].save_context(
                         {"input": query}, {"output": result["output"]}
                     )
+                    symbol = extract_ticker_symbol(query)
+                    if symbol:
+                        chart = get_price_chart(symbol)
+                        st.plotly_chart(chart, use_container_width=True)
                 else:
                     errors.append(f"❌ Stock Analysis failed: {result['error']}")
 
@@ -401,137 +399,6 @@ def multi_agent_query(query: str) -> str:
         logger.error(f"Multi-agent query failed: {e}")
         st.session_state.error_count += 1
         return f"❌ An unexpected error occurred: {str(e)}\n\nPlease try rephrasing your question or contact support if the issue persists."
-
-
-def approve_hitl_response(user_query: str):
-    """Process HITL approval with logging."""
-    try:
-        final_response = st.session_state.hitl_edit_box
-        original_response = st.session_state.pending_hitl_response
-
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        diff = diff_text(original_response, final_response)
-
-        st.session_state.hitl_log.append(
-            {
-                "query": user_query,
-                "original_response": original_response,
-                "edited_response": final_response,
-                "timestamp": timestamp,
-                "status": "approved",
-                "diff": diff,
-            }
-        )
-
-        # Add to conversation history
-        st.session_state.conversation_history.extend(
-            [
-                {"role": "user", "content": user_query},
-                {"role": "assistant", "content": final_response},
-            ]
-        )
-        # Persist to storage
-        append_history(
-            [
-                {"role": "user", "content": user_query},
-                {"role": "assistant", "content": final_response},
-            ],
-            st.session_state.get("user_id", "default"),
-        )
-
-        st.session_state.latest_response = final_response
-        st.session_state.pending_hitl_response = None
-
-        # Show success message
-        st.success("✅ Response approved and added to conversation!")
-
-    except Exception as e:
-        st.error(f"Error approving response: {e}")
-
-
-def reject_hitl_response(user_query: str):
-    """Discard the pending response and log the action."""
-    try:
-        st.session_state.hitl_log.append(
-            {
-                "query": user_query,
-                "original_response": st.session_state.pending_hitl_response,
-                "edited_response": None,
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "status": "rejected",
-                "diff": "",
-            }
-        )
-        st.session_state.pending_hitl_response = None
-        st.warning("❌ Response rejected and discarded.")
-    except Exception as e:
-        st.error(f"Error rejecting response: {e}")
-
-
-def display_sidebar():
-    """Display enhanced sidebar with controls and statistics."""
-    with st.sidebar:
-        st.markdown(f"**User:** {st.session_state.get('user_id','guest')}")
-        if st.button("Logout"):
-            st.session_state.authenticated = False
-            st.session_state.user_id = ""
-            st.rerun()
-        st.markdown("## 🎛️ Controls")
-
-        # HITL toggle
-        st.session_state.hitl_mode = st.checkbox(
-            "🧠 Human-in-the-Loop Review",
-            value=st.session_state.hitl_mode,
-            help="Review and edit AI responses before they're added to the conversation",
-        )
-
-        # Conversation management
-        st.markdown("---")
-        st.markdown("## 💬 Conversation")
-
-        if st.button("🗑️ Clear History", help="Clear all conversation history"):
-            st.session_state.conversation_history = []
-            st.session_state.latest_response = ""
-            st.session_state.last_user_query = ""
-            clear_history(st.session_state.get("user_id", "default"))
-            st.success("Conversation history cleared!")
-
-        # HITL log viewer
-        if st.session_state.hitl_log and st.checkbox("🔍 View HITL Edit Log"):
-            st.markdown("### Recent HITL Actions")
-            for i, entry in enumerate(reversed(st.session_state.hitl_log[-5:]), 1):
-                label = "Edit" if entry.get("status") == "approved" else "Reject"
-                with st.expander(f"{label} {i}: {entry['query'][:30]}..."):
-                    st.markdown(f"**Timestamp:** {entry.get('timestamp','')}  ")
-                    if entry.get("status") == "rejected":
-                        st.markdown("Response was rejected.")
-                        st.text_area(
-                            "Original",
-                            entry.get("original_response", ""),
-                            height=100,
-                            key=f"orig_{i}",
-                            disabled=True,
-                        )
-                    else:
-                        st.markdown("**Original:**")
-                        st.text_area(
-                            "",
-                            entry.get("original_response", ""),
-                            height=100,
-                            key=f"orig_{i}",
-                            disabled=True,
-                        )
-                        st.markdown("**Final:**")
-                        st.text_area(
-                            "",
-                            entry.get("edited_response", ""),
-                            height=100,
-                            key=f"edit_{i}",
-                            disabled=True,
-                        )
-                        if entry.get("diff"):
-                            st.markdown("**Changes:**")
-                            st.code(entry["diff"], language="diff")
 
 
 def main():
@@ -639,6 +506,7 @@ def main():
                     append_history(
                         response_dict,
                         st.session_state.get("user_id", "default"),
+                        st.session_state.get("current_conversation"),
                     )
                     st.session_state.latest_response = generated_response
 

@@ -1,7 +1,8 @@
-from langchain.agents import create_tool_calling_agent
-from langchain_core.prompts import ChatPromptTemplate
 from typing import List
+
+from langchain.agents import create_tool_calling_agent
 from langchain.tools import BaseTool
+from langchain_core.prompts import ChatPromptTemplate
 
 from tools import (
     get_market_sentiment_news,
@@ -13,24 +14,30 @@ from tools import (
     tavily_search,
 )
 
-def create_enhanced_prompt(system_message: str, include_context: bool = True) -> ChatPromptTemplate:
+
+def create_enhanced_prompt(
+    system_message: str, include_context: bool = True
+) -> ChatPromptTemplate:
     """Create enhanced prompt template with better context handling."""
     messages = [("system", system_message)]
-    
+
     if include_context:
         messages.append(("placeholder", "{chat_history}"))
-    
-    messages.extend([
-        ("human", "{input}"),
-        ("placeholder", "{agent_scratchpad}"),
-    ])
-    
+
+    messages.extend(
+        [
+            ("human", "{input}"),
+            ("placeholder", "{agent_scratchpad}"),
+        ]
+    )
+
     return ChatPromptTemplate.from_messages(messages)
+
 
 def create_stock_data_agent(llm):
     """Create specialized stock data agent with enhanced capabilities."""
     tools = [get_stock_data, get_stock_analysis]
-    
+
     system_message = """You are a professional stock data analyst with expertise in financial markets.
 
 Your responsibilities:
@@ -44,10 +51,11 @@ Always provide specific, data-driven responses with proper context and disclaime
     prompt = create_enhanced_prompt(system_message)
     return create_tool_calling_agent(llm, tools, prompt)
 
+
 def create_sentiment_agent(llm):
     """Create specialized sentiment analysis agent."""
     tools = [get_market_sentiment_news, get_news_from_newsapi]
-    
+
     system_message = """You are a market sentiment specialist focused on news analysis and market psychology.
 
 Your responsibilities:
@@ -60,6 +68,7 @@ Provide balanced analysis that considers both positive and negative sentiment fa
 
     prompt = create_enhanced_prompt(system_message)
     return create_tool_calling_agent(llm, tools, prompt)
+
 
 def create_social_sentiment_agent(llm):
     """Create specialized agent for social media sentiment."""
@@ -77,10 +86,11 @@ Focus on capturing the crowd's mood from social platforms."""
     prompt = create_enhanced_prompt(system_message)
     return create_tool_calling_agent(llm, tools, prompt)
 
+
 def create_insights_agent(llm):
     """Create specialized insights generation agent."""
     tools = [tavily_search, process_search_tool]
-    
+
     system_message = """You are a financial research specialist who generates comprehensive market insights.
 
 Your responsibilities:
@@ -94,10 +104,11 @@ Focus on delivering well-researched, balanced perspectives that help users make 
     prompt = create_enhanced_prompt(system_message)
     return create_tool_calling_agent(llm, tools, prompt)
 
+
 def create_general_purpose_agent(llm):
     """Create general-purpose financial assistant."""
     tools = [tavily_search]
-    
+
     system_message = """You are a knowledgeable financial assistant capable of handling diverse queries.
 
 Your responsibilities:
@@ -109,26 +120,4 @@ Your responsibilities:
 Always prioritize accuracy and provide educational value in your responses."""
 
     prompt = create_enhanced_prompt(system_message)
-    return create_tool_calling_agent(llm, tools, prompt)
-
-def create_coordinator_agent(llm):
-    """Create coordinator agent for managing multi-agent interactions."""
-    tools = []
-    
-    system_message = """You are an intelligent coordinator that manages interactions between specialized financial agents.
-
-Your responsibilities:
-- Analyze user queries to determine which agents should be involved
-- Coordinate responses from multiple agents
-- Synthesize information from different sources into coherent insights
-- Ensure comprehensive coverage of user requests
-
-Focus on providing well-structured, comprehensive responses that leverage the strengths of each specialized agent."""
-
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_message),
-        ("human", "{input}"),
-        ("placeholder", "{agent_scratchpad}"),
-    ])
-    
     return create_tool_calling_agent(llm, tools, prompt)

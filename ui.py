@@ -2,15 +2,44 @@ import streamlit as st
 from langchain.memory import ConversationBufferWindowMemory
 
 import config
-from database import verify_user
+from database import create_user, reset_password, verify_user
 from storage import clear_history, create_conversation, get_conversations, load_history
 
 
 def login_screen() -> None:
     """Login form that checks credentials against the database."""
+    """Login and registration form."""
     st.markdown("## 🔐 Login")
+    mode = st.radio("Mode", ["Login", "Register", "Reset Password"], horizontal=True)
+
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
+
+    if mode == "Register":
+        password_confirm = st.text_input("Confirm Password", type="password")
+        if st.button("Register"):
+            if password != password_confirm:
+                st.error("Passwords do not match")
+            else:
+                if create_user(username, password):
+                    st.success("User created! Please log in.")
+                else:
+                    st.error("Username already exists")
+        st.stop()
+
+    elif mode == "Reset Password":
+        new_pass = st.text_input("New Password", type="password")
+        confirm = st.text_input("Confirm New Password", type="password")
+        if st.button("Reset"):
+            if new_pass != confirm:
+                st.error("Passwords do not match")
+            else:
+                if reset_password(username, password, new_pass):
+                    st.success("Password updated. Please log in.")
+                else:
+                    st.error("Invalid username or password")
+        st.stop()
+
     if st.button("Login"):
         if verify_user(username, password):
             st.session_state.authenticated = True

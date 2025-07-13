@@ -93,6 +93,37 @@ def init_db() -> None:
         session.close()
 
 
+def create_user(username: str, password: str) -> bool:
+    """Create a new user if the username doesn't already exist."""
+    session = SessionLocal()
+    try:
+        if session.query(User).filter_by(username=username).first():
+            return False
+        user = User(username=username, password_hash=pwd_context.hash(password))
+        session.add(user)
+        session.flush()
+        # create an initial conversation for convenience
+        session.add(Conversation(user_id=user.id, title="Chat 1"))
+        session.commit()
+        return True
+    finally:
+        session.close()
+
+
+def reset_password(username: str, old_password: str, new_password: str) -> bool:
+    """Update the user's password if the old password is correct."""
+    session = SessionLocal()
+    try:
+        user = session.query(User).filter_by(username=username).first()
+        if not user or not pwd_context.verify(old_password, user.password_hash):
+            return False
+        user.password_hash = pwd_context.hash(new_password)
+        session.commit()
+        return True
+    finally:
+        session.close()
+
+
 def verify_user(username: str, password: str) -> bool:
     """Verify username and password against stored hash."""
     session = SessionLocal()

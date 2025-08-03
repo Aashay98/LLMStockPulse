@@ -211,3 +211,30 @@ def friendly_error_message(error: str) -> str:
             "Please try rephrasing your request or provide more details."
         )
     return error
+
+
+def validate_username(username: str) -> str:
+    """Validate and clean username input."""
+    if not username or not isinstance(username, str):
+        raise ValidationException("Username must be a non-empty string")
+
+    username = username.strip()
+    if not re.fullmatch(r"[A-Za-z0-9_]{3,30}", username):
+        raise ValidationException(
+            "Username must be 3-30 characters and contain only letters, numbers, and underscores"
+        )
+
+    return username
+
+
+def validate_password(password: str) -> str:
+    """Validate password strength."""
+    if not password or not isinstance(password, str):
+        raise ValidationException("Password must be a non-empty string")
+
+    if len(password) < 8 or not re.search(r"[A-Za-z]", password) or not re.search(r"\d", password):
+        raise ValidationException(
+            "Password must be at least 8 characters long and include letters and numbers"
+        )
+
+    return password

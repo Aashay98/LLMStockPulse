@@ -16,7 +16,9 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 import config
+from exceptions import ValidationException
 from tools import get_sentence_transformer
+from utils import validate_password, validate_username
 
 Base = declarative_base()
 engine = create_engine(config.DB_URL)
@@ -97,6 +99,12 @@ def create_user(username: str, password: str) -> bool:
     """Create a new user if the username doesn't already exist."""
     session = SessionLocal()
     try:
+        try:
+            username = validate_username(username)
+            validate_password(password)
+        except ValidationException:
+            return False
+        # Check if username already exists
         if session.query(User).filter_by(username=username).first():
             return False
         user = User(username=username, password_hash=pwd_context.hash(password))
@@ -114,6 +122,12 @@ def reset_password(username: str, old_password: str, new_password: str) -> bool:
     """Update the user's password if the old password is correct."""
     session = SessionLocal()
     try:
+        try:
+            username = validate_username(username)
+            validate_password(new_password)
+        except ValidationException:
+            return False
+
         user = session.query(User).filter_by(username=username).first()
         if not user or not pwd_context.verify(old_password, user.password_hash):
             return False
@@ -128,6 +142,11 @@ def verify_user(username: str, password: str) -> bool:
     """Verify username and password against stored hash."""
     session = SessionLocal()
     try:
+        try:
+            username = validate_username(username)
+        except ValidationException:
+            return False
+
         user = session.query(User).filter_by(username=username).first()
         if user and pwd_context.verify(password, user.password_hash):
             return True

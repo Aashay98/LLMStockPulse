@@ -347,7 +347,7 @@ def multi_agent_query(query: str) -> str:
 
         # Always generate insights for comprehensive analysis
         if query_type in ["stock", "sentiment", "both", "general"]:
-            with st.spinner("� Generating insights..."):
+            with st.spinner("Generating insights..."):
                 insights_prompt = generate_insights_prompt(query, query_type)
                 result = execute_agent_safely(
                     executors["insights"],

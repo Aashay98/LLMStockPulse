@@ -200,6 +200,14 @@ def extract_ticker_symbol(text: str) -> str | None:
     if not text:
         return None
     match = re.search(r"\b[A-Z]{1,5}\b", text.upper())
+
+    # First try to find a symbol preceded by a dollar sign (e.g. ``$AAPL`` or ``$msft``)
+    match = re.search(r"\$([a-zA-Z]{1,5})", text)
+    if match:
+        return match.group(1).upper()
+
+    # Otherwise look for standalone uppercase tokens like ``AAPL``
+    match = re.search(r"\b[A-Z]{1,5}\b", text)
     return match.group(0) if match else None
 
 
@@ -232,7 +240,11 @@ def validate_password(password: str) -> str:
     if not password or not isinstance(password, str):
         raise ValidationException("Password must be a non-empty string")
 
-    if len(password) < 8 or not re.search(r"[A-Za-z]", password) or not re.search(r"\d", password):
+    if (
+        len(password) < 8
+        or not re.search(r"[A-Za-z]", password)
+        or not re.search(r"\d", password)
+    ):
         raise ValidationException(
             "Password must be at least 8 characters long and include letters and numbers"
         )

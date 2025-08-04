@@ -46,8 +46,8 @@ ALPHA_VANTAGE_BASE_URL = "https://www.alphavantage.co/query"
 NEWS_API_BASE_URL = "https://newsapi.org/v2/everything"
 
 # Rate limiting and caching settings
-REQUEST_TIMEOUT = 10
-MAX_RETRIES = 3
+REQUEST_TIMEOUT = 25
+MAX_RETRIES = 4
 CACHE_TTL = 300  # 5 minutes
 MAX_AGENT_ITERATIONS = int(os.getenv("MAX_AGENT_ITERATIONS"))
 # Number of recent messages to retain in each agent's memory window

@@ -77,3 +77,21 @@ def test_validate_password_invalid():
         validate_password("allletters")
     with pytest.raises(ValidationException):
         validate_password("12345678")
+
+
+def test_extract_ticker_symbol_basic():
+    from utils import extract_ticker_symbol
+
+    assert extract_ticker_symbol("What is the price of AAPL today?") == "AAPL"
+
+
+def test_extract_ticker_symbol_with_dollar():
+    from utils import extract_ticker_symbol
+
+    assert extract_ticker_symbol("Look up $msft performance") == "MSFT"
+
+
+def test_extract_ticker_symbol_none():
+    from utils import extract_ticker_symbol
+
+    assert extract_ticker_symbol("Tell me a joke") is None

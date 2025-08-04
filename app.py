@@ -10,6 +10,7 @@ from langchain_groq import ChatGroq
 
 import config
 from agents import *
+from constant import PAGE_TITLE, UI_CSS, USER_INPUT_PLACEHOLDER
 from database import init_db
 from hitl import approve_hitl_response, reject_hitl_response
 from log_config import configure_logging
@@ -17,7 +18,7 @@ from storage import append_history, load_history, load_relevant_history
 from tools import get_price_chart
 from ui import display_sidebar, login_screen
 from utils import (
-    classify_query,
+    classify_query_chain,
     extract_ticker_symbol,
     friendly_error_message,
     generate_insights_prompt,
@@ -33,7 +34,7 @@ torch.classes.__path__ = []  # add this line to manually set it to empty.
 
 # Page configuration
 st.set_page_config(
-    page_title="Stock Insight Assistant",
+    page_title=PAGE_TITLE,
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -41,53 +42,7 @@ st.set_page_config(
 
 # Custom CSS for better UI
 st.markdown(
-    """
-<style>
-    .main-header {
-        text-align: center;
-        padding: 1rem 0;
-        background: linear-gradient(90deg, #1f77b4, #ff7f0e);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        font-size: 2.5rem;
-        font-weight: bold;
-    }
-    .agent-response {
-        border-left: 4px solid #1f77b4;
-        padding-left: 1rem;
-        margin: 1rem 0;
-    }
-    .error-message {
-        background-color: #ffebee;
-        border-left: 4px solid #f44336;
-        padding: 1rem;
-        margin: 1rem 0;
-    }
-    .success-message {
-        background-color: #e8f5e8;
-        border-left: 4px solid #4caf50;
-        padding: 1rem;
-        margin: 1rem 0;
-    }
-    /* Chat bubbles */
-    .stChatMessage {
-        padding: 0.5rem 1rem;
-        border-radius: 1rem;
-        margin-bottom: 0.5rem;
-        max-width: 80%;
-    }
-    .stChatMessage.user {
-        background-color: var(--primary-color);
-        color: #ffffff;
-        align-self: flex-end;
-    }
-    .stChatMessage.assistant {
-        background-color: var(--secondary-background-color);
-        color: var(--text-color);
-        align-self: flex-start;
-    }
-</style>
-""",
+    UI_CSS,
     unsafe_allow_html=True,
 )
 
@@ -275,7 +230,7 @@ def multi_agent_query(query: str) -> str:
         context_prefix = f"{context_text}\n\n" if context_text else ""
 
         # Classify query and determine which agents to use
-        query_type = classify_query(query)
+        query_type = classify_query_chain(llm, query)
         logger.info(f"Query classified as: {query_type}")
 
         responses = []
@@ -441,7 +396,7 @@ def main():
 
         # Chat input
         user_query = st.chat_input(
-            "What would you like to know about the markets today?",
+            USER_INPUT_PLACEHOLDER
             key="main_chat_input",
         )
 
@@ -465,13 +420,6 @@ def main():
                     st.markdown("### 💡 Review Assistant's Draft Response")
                     st.info(
                         "Please review and edit the response below if needed, then click 'Approve' to add it to the conversation."
-                    )
-
-                    # Editable response
-                    edited_response = st.text_area(
-                        "Edit the response if needed:",
-                        height=400,
-                        key="hitl_edit_box",
                     )
 
                     col_approve, col_regenerate, col_reject = st.columns([1, 1, 1])
@@ -516,12 +464,6 @@ def main():
                 st.markdown("### 💡 Review Assistant's Draft Response")
                 st.info(
                     "Please review and edit the response below if needed, then click 'Approve' to add it to the conversation."
-                )
-
-                edited_response = st.text_area(
-                    "Edit the response if needed:",
-                    height=400,
-                    key="hitl_edit_box",
                 )
 
                 col_approve, col_regenerate, col_reject = st.columns([1, 1, 1])

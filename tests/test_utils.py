@@ -6,9 +6,12 @@ import pytest
 # Ensure the repository root is on the Python path for module imports
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
+from langchain_core.language_models.fake import FakeListLLM
+
 from exceptions import ValidationException
 from utils import (
     classify_query,
+    classify_query_chain,
     format_large_number,
     safe_float_conversion,
     validate_password,
@@ -40,6 +43,26 @@ def test_classify_query_both():
 
 def test_classify_query_general():
     assert classify_query("hello world") == "general"
+
+
+def test_classify_query_chain_stock():
+    llm = FakeListLLM(responses=['{"query_type": "stock"}'])
+    assert classify_query_chain(llm, "What is the stock price?") == "stock"
+
+
+def test_classify_query_chain_sentiment():
+    llm = FakeListLLM(responses=['{"query_type": "sentiment"}'])
+    assert classify_query_chain(llm, "latest sentiment news") == "sentiment"
+
+
+def test_classify_query_chain_both():
+    llm = FakeListLLM(responses=['{"query_type": "both"}'])
+    assert classify_query_chain(llm, "stock sentiment analysis") == "both"
+
+
+def test_classify_query_chain_general():
+    llm = FakeListLLM(responses=['{"query_type": "general"}'])
+    assert classify_query_chain(llm, "hello world") == "general"
 
 
 def test_safe_float_conversion():

@@ -1,9 +1,14 @@
 import difflib
 import logging
 import re
+from enum import Enum
 from typing import List
 
 import tiktoken
+from langchain_core.language_models.base import BaseLanguageModel
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel, Field
 
 from exceptions import ValidationException
 
@@ -119,6 +124,55 @@ def classify_query(query: str) -> str:
         return "sentiment"
     else:
         return "general"
+
+
+class QueryType(str, Enum):
+    """Supported query categories."""
+
+    STOCK = "stock"
+    SENTIMENT = "sentiment"
+    BOTH = "both"
+    GENERAL = "general"
+
+
+class QueryClassification(BaseModel):
+    """Structured output for query classification."""
+
+    query_type: QueryType = Field(
+        description="Category of the user's request: stock, sentiment, both, or general"
+    )
+
+
+def classify_query_chain(llm: BaseLanguageModel, query: str) -> str:
+    """Classify query using an LLM-powered chain with structured output."""
+    if not query:
+        return QueryType.GENERAL.value
+
+    parser = PydanticOutputParser(pydantic_object=QueryClassification)
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                "Classify the user's financial query into one of: stock, sentiment, both, or general. "
+                "Return JSON following the given format instructions.\n{format_instructions}",
+            ),
+            ("human", "{query}"),
+        ]
+    )
+
+    chain = prompt | llm | parser
+
+    try:
+        result: QueryClassification = chain.invoke(
+            {
+                "query": query,
+                "format_instructions": parser.get_format_instructions(),
+            }
+        )
+        return result.query_type.value
+    except Exception as e:
+        logger.warning(f"LLM classification failed ({e}); falling back to heuristics")
+        return classify_query(query)
 
 
 def trim_text_to_token_limit(

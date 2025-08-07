@@ -1,7 +1,9 @@
 annotated-types==0.7.0
 anyio==4.8.0
 async-timeout==4.0.3
+asyncio==4.0.0
 attrs==25.1.0
+bcrypt==4.3.0
 beautifulsoup4==4.13.3
 blinker==1.9.0
 bs4==0.0.2
@@ -40,6 +42,8 @@ multidict==6.1.0
 mypy-extensions==1.0.0
 narwhals==1.30.0
 numpy==2.0.2
+opentelemetry-exporter-otlp==1.36.0
+opentelemetry-sdk==1.36.0
 orjson==3.10.15
 packaging==24.2
 pandas==2.2.3
@@ -85,5 +89,3 @@ vaderSentiment==3.3.2
 watchdog==6.0.0
 yarl==1.18.3
 zstandard==0.23.0
-opentelemetry-sdk
-opentelemetry-exporter-otlp

@@ -60,6 +60,14 @@ def login_screen() -> None:
             st.rerun()
         else:
             st.error("Invalid credentials")
+    if st.button("Continue as Guest"):
+        st.session_state.authenticated = True
+        st.session_state.user_id = "guest"
+        st.session_state.current_conversation = None
+        st.session_state.conversations = []
+        st.session_state.conversation_history = []
+        st.success("Continuing as guest")
+        st.rerun()
     st.stop()
 
 
@@ -70,6 +78,7 @@ def display_sidebar() -> None:
         if st.button("Logout"):
             st.session_state.authenticated = False
             st.session_state.user_id = ""
+            st.session_state.conversation_history = []
             st.rerun()
         st.markdown("## 🎛️ Controls")
 
@@ -81,24 +90,47 @@ def display_sidebar() -> None:
 
         st.markdown("---")
         st.markdown("## 💬 Conversation")
-        conv_opts = {
-            c["title"]: c["id"] for c in st.session_state.get("conversations", [])
-        }
-        if conv_opts:
-            titles = list(conv_opts.keys())
-            current_id = st.session_state.get("current_conversation")
-            try:
-                index = list(conv_opts.values()).index(current_id)
-            except ValueError:
-                index = 0
-            selected_title = st.selectbox("Select chat", titles, index=index)
-            selected_id = conv_opts[selected_title]
-            if selected_id != current_id:
-                st.session_state.current_conversation = selected_id
-                st.session_state.conversation_history = load_history(
-                    st.session_state.user_id,
-                    selected_id,
+        if st.session_state.get("user_id") != "guest":
+            conv_opts = {
+                c["title"]: c["id"] for c in st.session_state.get("conversations", [])
+            }
+            if conv_opts:
+                titles = list(conv_opts.keys())
+                current_id = st.session_state.get("current_conversation")
+                try:
+                    index = list(conv_opts.values()).index(current_id)
+                except ValueError:
+                    index = 0
+                selected_title = st.selectbox("Select chat", titles, index=index)
+                selected_id = conv_opts[selected_title]
+                if selected_id != current_id:
+                    st.session_state.current_conversation = selected_id
+                    st.session_state.conversation_history = load_history(
+                        st.session_state.user_id,
+                        selected_id,
+                    )
+                    for mkey in [
+                        "stock_memory",
+                        "sentiment_memory",
+                        "social_memory",
+                        "insights_memory",
+                        "general_memory",
+                    ]:
+                        st.session_state[mkey] = ConversationBufferWindowMemory(
+                            k=config.MEMORY_WINDOW_SIZE,
+                            return_messages=True,
+                            memory_key="chat_history",
+                        )
+                    st.rerun()
+
+            if st.button("➕ New Chat"):
+                new_title = f"Chat {len(conv_opts) + 1}"
+                new_id = create_conversation(st.session_state.user_id, new_title)
+                st.session_state.conversations.append(
+                    {"id": new_id, "title": new_title}
                 )
+                st.session_state.current_conversation = new_id
+                st.session_state.conversation_history = []
                 for mkey in [
                     "stock_memory",
                     "sentiment_memory",
@@ -112,35 +144,18 @@ def display_sidebar() -> None:
                         memory_key="chat_history",
                     )
                 st.rerun()
-
-        if st.button("➕ New Chat"):
-            new_title = f"Chat {len(conv_opts) + 1}"
-            new_id = create_conversation(st.session_state.user_id, new_title)
-            st.session_state.conversations.append({"id": new_id, "title": new_title})
-            st.session_state.current_conversation = new_id
-            st.session_state.conversation_history = []
-            for mkey in [
-                "stock_memory",
-                "sentiment_memory",
-                "social_memory",
-                "insights_memory",
-                "general_memory",
-            ]:
-                st.session_state[mkey] = ConversationBufferWindowMemory(
-                    k=config.MEMORY_WINDOW_SIZE,
-                    return_messages=True,
-                    memory_key="chat_history",
-                )
-            st.rerun()
+        else:
+            st.info("Guest sessions are temporary and not saved.")
 
         if st.button("🗑️ Clear History", help="Clear all conversation history"):
             st.session_state.conversation_history = []
             st.session_state.latest_response = ""
             st.session_state.last_user_query = ""
-            clear_history(
-                st.session_state.get("user_id", "default"),
-                st.session_state.get("current_conversation"),
-            )
+            if st.session_state.get("user_id") != "guest":
+                clear_history(
+                    st.session_state.get("user_id", "default"),
+                    st.session_state.get("current_conversation"),
+                )
             st.success("Conversation history cleared!")
 
         if st.session_state.hitl_log and st.checkbox("🔍 View HITL Edit Log"):

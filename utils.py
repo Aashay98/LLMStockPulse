@@ -11,9 +11,10 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
 from exceptions import ValidationException
+from log_config import configure_logging
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+configure_logging()
 logger = logging.getLogger(__name__)
 
 

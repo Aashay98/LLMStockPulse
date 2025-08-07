@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
 from typing import Dict
+import uuid
 
 import streamlit as st
 import torch
@@ -13,7 +14,7 @@ from agents import *
 from constant import PAGE_TITLE, UI_CSS, USER_INPUT_PLACEHOLDER
 from database import init_db
 from hitl import approve_hitl_response, reject_hitl_response
-from log_config import configure_logging
+from log_config import configure_logging, set_correlation_id
 from storage import append_history, load_history, load_relevant_history
 from tools import get_price_chart
 from ui import display_sidebar, login_screen
@@ -26,6 +27,7 @@ from utils import (
 
 # Configure logging
 configure_logging()
+set_correlation_id(str(uuid.uuid4()))
 logger = logging.getLogger(__name__)
 
 init_db()

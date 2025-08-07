@@ -1,7 +1,7 @@
 import logging
+import uuid
 from datetime import datetime
 from typing import Dict
-import uuid
 
 import streamlit as st
 import torch
@@ -11,12 +11,20 @@ from langchain_groq import ChatGroq
 
 import config
 from agents import *
-from constant import PAGE_TITLE, UI_CSS, USER_INPUT_PLACEHOLDER
+from constant import PAGE_TITLE, UI_CSS
 from database import init_db
+from error_tracking import capture_exception, init_sentry
 from hitl import approve_hitl_response, reject_hitl_response
 from log_config import configure_logging, set_correlation_id
+from metrics import (
+    ERROR_COUNTER,
+    REQUEST_COUNTER,
+    REQUEST_LATENCY,
+    start_metrics_server,
+)
 from storage import append_history, load_history, load_relevant_history
 from tools import get_price_chart
+from tracing import get_tracer
 from ui import display_sidebar, login_screen
 from utils import (
     classify_query_chain,
@@ -28,6 +36,10 @@ from utils import (
 # Configure logging
 configure_logging()
 set_correlation_id(str(uuid.uuid4()))
+init_sentry(config.SENTRY_DSN)
+start_metrics_server(config.METRICS_PORT)
+tracer = get_tracer(__name__)
+
 logger = logging.getLogger(__name__)
 
 init_db()
@@ -201,161 +213,176 @@ def execute_agent_safely(executor: AgentExecutor, input_data: Dict) -> Dict[str,
 
 
 def multi_agent_query(query: str) -> str:
-    """Enhanced multi-agent query processing with better error handling."""
-    try:
+    """Enhanced multi-agent query processing with tracing and metrics."""
 
-        # Initialize components
-        llm = initialize_llm()
-        agents = initialize_agents(llm)
+    user_id = st.session_state.get("user_id", "anonymous")
+    REQUEST_COUNTER.labels(user=user_id).inc()
+    with tracer.start_as_current_span("multi_agent_query"), REQUEST_LATENCY.labels(
+        user=user_id
+    ).time():
+        try:
 
-        memories = {
-            "stock_memory": st.session_state.stock_memory,
-            "sentiment_memory": st.session_state.sentiment_memory,
-            "social_memory": st.session_state.social_memory,
-            "insights_memory": st.session_state.insights_memory,
-            "general_memory": st.session_state.general_memory,
-        }
+            # Initialize components
+            llm = initialize_llm()
+            agents = initialize_agents(llm)
 
-        executors = create_agent_executors(agents, memories)
+            memories = {
+                "stock_memory": st.session_state.stock_memory,
+                "sentiment_memory": st.session_state.sentiment_memory,
+                "social_memory": st.session_state.social_memory,
+                "insights_memory": st.session_state.insights_memory,
+                "general_memory": st.session_state.general_memory,
+            }
 
-        # Retrieve relevant context from persistent history
-        user_id = st.session_state.get("user_id", "default")
-        context_entries = load_relevant_history(
-            user_id,
-            st.session_state.get("current_conversation"),
-            query,
-            config.MEMORY_WINDOW_SIZE,
-        )
-        context_text = "\n".join(
-            f"{e['role']}: {e['content']}" for e in context_entries
-        )
-        context_prefix = f"{context_text}\n\n" if context_text else ""
+            executors = create_agent_executors(agents, memories)
 
-        # Classify query and determine which agents to use
-        query_type = classify_query_chain(llm, query)
-        logger.info(f"Query classified as: {query_type}")
+            # Retrieve relevant context from persistent history
+            user_id = st.session_state.get("user_id", "default")
+            context_entries = load_relevant_history(
+                user_id,
+                st.session_state.get("current_conversation"),
+                query,
+                config.MEMORY_WINDOW_SIZE,
+            )
+            context_text = "\n".join(
+                f"{e['role']}: {e['content']}" for e in context_entries
+            )
+            context_prefix = f"{context_text}\n\n" if context_text else ""
 
-        responses = []
-        errors = []
+            # Classify query and determine which agents to use
+            query_type = classify_query_chain(llm, query)
+            logger.info(f"Query classified as: {query_type}")
 
-        # Execute appropriate agents based on query type
-        if query_type in ["stock", "both"]:
-            with st.spinner("🔍 Analyzing stock data..."):
-                result = execute_agent_safely(
-                    executors["stock_data"],
-                    {
-                        "chat_history": memories["stock_memory"].load_memory_variables(
-                            {}
-                        )["chat_history"],
-                        "input": f"{context_prefix}Provide comprehensive stock analysis for: {query}",
-                    },
-                )
+            responses = []
+            errors = []
 
-                if result["success"]:
-                    responses.append(f"## 📈 Stock Data Analysis\n{result['output']}")
-                    memories["stock_memory"].save_context(
-                        {"input": query}, {"output": result["output"]}
+            # Execute appropriate agents based on query type
+            if query_type in ["stock", "both"]:
+                with st.spinner("🔍 Analyzing stock data..."):
+                    result = execute_agent_safely(
+                        executors["stock_data"],
+                        {
+                            "chat_history": memories[
+                                "stock_memory"
+                            ].load_memory_variables({})["chat_history"],
+                            "input": f"{context_prefix}Provide comprehensive stock analysis for: {query}",
+                        },
                     )
-                    symbol = extract_ticker_symbol(query)
-                    if symbol:
-                        chart = get_price_chart(symbol)
-                        st.plotly_chart(chart, use_container_width=True)
-                else:
-                    errors.append(f"❌ Stock Analysis failed: {result['error']}")
 
-        if query_type in ["sentiment", "both"]:
-            with st.spinner("📰 Analyzing market sentiment..."):
-                result = execute_agent_safely(
-                    executors["sentiment"],
-                    {
-                        "chat_history": memories[
-                            "sentiment_memory"
-                        ].load_memory_variables({})["chat_history"],
-                        "input": f"{context_prefix}Analyze market sentiment and news for: {query}",
-                    },
-                )
+                    if result["success"]:
+                        responses.append(
+                            f"## 📈 Stock Data Analysis\n{result['output']}"
+                        )
+                        memories["stock_memory"].save_context(
+                            {"input": query}, {"output": result["output"]}
+                        )
+                        symbol = extract_ticker_symbol(query)
+                        if symbol:
+                            chart = get_price_chart(symbol)
+                            st.plotly_chart(chart, use_container_width=True)
+                    else:
+                        errors.append(f"❌ Stock Analysis failed: {result['error']}")
 
-                if result["success"]:
-                    responses.append(f"## Sentiment Analysis\n{result['output']}")
-                    memories["sentiment_memory"].save_context(
-                        {"input": query}, {"output": result["output"]}
+            if query_type in ["sentiment", "both"]:
+                with st.spinner("📰 Analyzing market sentiment..."):
+                    result = execute_agent_safely(
+                        executors["sentiment"],
+                        {
+                            "chat_history": memories[
+                                "sentiment_memory"
+                            ].load_memory_variables({})["chat_history"],
+                            "input": f"{context_prefix}Analyze market sentiment and news for: {query}",
+                        },
                     )
-                else:
-                    errors.append(f"❌ Sentiment Analysis failed: {result['error']}")
 
-            with st.spinner("📣 Gathering social media sentiment..."):
-                result = execute_agent_safely(
-                    executors["social_sentiment"],
-                    {
-                        "chat_history": memories["social_memory"].load_memory_variables(
-                            {}
-                        )["chat_history"],
-                        "input": f"{context_prefix}Summarize social media sentiment for: {query}",
-                    },
-                )
+                    if result["success"]:
+                        responses.append(f"## Sentiment Analysis\n{result['output']}")
+                        memories["sentiment_memory"].save_context(
+                            {"input": query}, {"output": result["output"]}
+                        )
+                    else:
+                        errors.append(
+                            f"❌ Sentiment Analysis failed: {result['error']}"
+                        )
 
-                if result["success"]:
-                    responses.append(f"## 🗣️ Social Sentiment\n{result['output']}")
-                    memories["social_memory"].save_context(
-                        {"input": query}, {"output": result["output"]}
+                with st.spinner("📣 Gathering social media sentiment..."):
+                    result = execute_agent_safely(
+                        executors["social_sentiment"],
+                        {
+                            "chat_history": memories[
+                                "social_memory"
+                            ].load_memory_variables({})["chat_history"],
+                            "input": f"{context_prefix}Summarize social media sentiment for: {query}",
+                        },
                     )
-                else:
-                    errors.append(f"❌ Social Sentiment failed: {result['error']}")
 
-        # Always generate insights for comprehensive analysis
-        if query_type in ["stock", "sentiment", "both", "general"]:
-            with st.spinner("Generating insights..."):
-                insights_prompt = generate_insights_prompt(query, query_type)
-                result = execute_agent_safely(
-                    executors["insights"],
-                    {
-                        "chat_history": memories[
-                            "insights_memory"
-                        ].load_memory_variables({})["chat_history"],
-                        "input": f"{context_prefix}{insights_prompt}",
-                    },
-                )
+                    if result["success"]:
+                        responses.append(f"## 🗣️ Social Sentiment\n{result['output']}")
+                        memories["social_memory"].save_context(
+                            {"input": query}, {"output": result["output"]}
+                        )
+                    else:
+                        errors.append(f"❌ Social Sentiment failed: {result['error']}")
 
-                if result["success"]:
-                    responses.append(f"## Market Insights\n{result['output']}")
-                    memories["insights_memory"].save_context(
-                        {"input": insights_prompt}, {"output": result["output"]}
+            # Always generate insights for comprehensive analysis
+            if query_type in ["stock", "sentiment", "both", "general"]:
+                with st.spinner("Generating insights..."):
+                    insights_prompt = generate_insights_prompt(query, query_type)
+                    result = execute_agent_safely(
+                        executors["insights"],
+                        {
+                            "chat_history": memories[
+                                "insights_memory"
+                            ].load_memory_variables({})["chat_history"],
+                            "input": f"{context_prefix}{insights_prompt}",
+                        },
                     )
-                else:
-                    errors.append(f"❌ Insights Generation failed: {result['error']}")
 
-        # Combine responses
-        if responses:
-            final_response = "\n\n".join(responses)
-        else:
-            # Fallback to general agent if all specialized agents fail
-            with st.spinner("🤖 Processing with general assistant..."):
-                result = execute_agent_safely(
-                    executors["general"],
-                    {
-                        "chat_history": memories[
-                            "general_memory"
-                        ].load_memory_variables({})["chat_history"],
-                        "input": f"{context_prefix}{query}",
-                    },
-                )
+                    if result["success"]:
+                        responses.append(f"## Market Insights\n{result['output']}")
+                        memories["insights_memory"].save_context(
+                            {"input": insights_prompt}, {"output": result["output"]}
+                        )
+                    else:
+                        errors.append(
+                            f"❌ Insights Generation failed: {result['error']}"
+                        )
 
-                if result["success"]:
-                    final_response = f"## 🤖 General Analysis\n{result['output']}"
-                else:
-                    final_response = "❌ I apologize, but I'm unable to process your request at the moment. Please try again later."
+            # Combine responses
+            if responses:
+                final_response = "\n\n".join(responses)
+            else:
+                # Fallback to general agent if all specialized agents fail
+                with st.spinner("🤖 Processing with general assistant..."):
+                    result = execute_agent_safely(
+                        executors["general"],
+                        {
+                            "chat_history": memories[
+                                "general_memory"
+                            ].load_memory_variables({})["chat_history"],
+                            "input": f"{context_prefix}{query}",
+                        },
+                    )
 
-        # Append errors if any
-        if errors:
-            st.session_state.error_count += len(errors)
-            final_response += f"\n\n## ⚠️ Warnings\n" + "\n".join(errors)
+                    if result["success"]:
+                        final_response = f"## 🤖 General Analysis\n{result['output']}"
+                    else:
+                        final_response = "❌ I apologize, but I'm unable to process your request at the moment. Please try again later."
 
-        return final_response
+            # Append errors if any
+            if errors:
+                st.session_state.error_count += len(errors)
+                ERROR_COUNTER.labels(user=user_id).inc(len(errors))
+                final_response += f"\n\n## ⚠️ Warnings\n" + "\n".join(errors)
 
-    except Exception as e:
-        logger.error(f"Multi-agent query failed: {e}")
-        st.session_state.error_count += 1
-        return f"❌ An unexpected error occurred: {str(e)}\n\nPlease try rephrasing your question or contact support if the issue persists."
+            return final_response
+
+        except Exception as e:  # pragma: no cover - defensive
+            ERROR_COUNTER.labels(user=user_id).inc()
+            capture_exception(e)
+            logger.error(f"Multi-agent query failed: {e}")
+            st.session_state.error_count += 1
+            return f"❌ An unexpected error occurred: {str(e)}\n\nPlease try rephrasing your question or contact support if the issue persists."
 
 
 def main():
@@ -398,7 +425,7 @@ def main():
 
         # Chat input
         user_query = st.chat_input(
-            USER_INPUT_PLACEHOLDER
+            "Ask about stock trends, company performance, or market insights...",
             key="main_chat_input",
         )
 

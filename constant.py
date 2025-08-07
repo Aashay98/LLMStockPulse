@@ -46,9 +46,7 @@ UI_CSS = """
 </style>
 """
 PAGE_TITLE = "Stock Insight Assistant"
-USER_INPUT_PLACEHOLDER = (
-    "Ask about stock trends, company performance, or market insights..."
-)
+
 STOCK_DATA_AGENT_SYSTEM_MESSAGE = """You are a professional stock data analyst with expertise in financial markets.
 
 Your responsibilities:

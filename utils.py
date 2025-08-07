@@ -2,7 +2,6 @@ import difflib
 import logging
 import re
 from enum import Enum
-from typing import List
 
 import tiktoken
 from langchain_core.language_models.base import BaseLanguageModel
@@ -29,39 +28,6 @@ def validate_stock_symbol(symbol: str) -> str:
         raise ValidationException(f"Invalid stock symbol format: {symbol}")
 
     return symbol
-
-
-def generate_suggestions_from_topic(topic: str) -> List[str]:
-    """Generate contextual suggestions based on topic."""
-    if not topic:
-        return []
-
-    topic = topic.lower()
-
-    if any(
-        keyword in topic
-        for keyword in ["stock", "price", "market", "nasdaq", "dow", "s&p"]
-    ):
-        return [
-            "Compare this stock with MSFT or AAPL",
-            "What is the earnings trend for this stock?",
-            "Show recent insider trading activity",
-            "What's the long-term outlook?",
-        ]
-    elif any(keyword in topic for keyword in ["sentiment", "news", "opinion", "trend"]):
-        return [
-            "Summarize recent analyst opinions",
-            "What's the social media sentiment?",
-            "Any upcoming events that could shift sentiment?",
-            "Compare this sentiment to last month",
-        ]
-    else:
-        return [
-            "Can you go deeper into this topic?",
-            "What are the key risks involved?",
-            "Give a beginner summary",
-            "What are related stocks to watch?",
-        ]
 
 
 def generate_insights_prompt(query: str, query_type: str) -> str:

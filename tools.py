@@ -1,5 +1,6 @@
 import logging
 import time
+import uuid
 from functools import lru_cache
 from typing import Any, Dict, List
 
@@ -14,6 +15,7 @@ from langchain.tools import tool
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.documents import Document
 from sentence_transformers import SentenceTransformer
+from tracing import get_tracer
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
 from config import (
@@ -26,8 +28,9 @@ from config import (
     REQUEST_TIMEOUT,
     TWITTER_BEARER_TOKEN,
 )
+from error_tracking import capture_exception
 from exceptions import APIException
-from log_config import configure_logging
+from log_config import configure_logging, set_correlation_id
 from rate_limit import check_api_usage
 from utils import (
     clean_content,
@@ -39,6 +42,8 @@ from utils import (
 
 # Configure logging
 configure_logging()
+set_correlation_id(str(uuid.uuid4()))
+tracer = get_tracer(__name__)
 logger = logging.getLogger(__name__)
 
 
@@ -60,9 +65,14 @@ def make_api_request(
         check_api_usage(api_name)
     for attempt in range(MAX_RETRIES):
         try:
-            response = requests.get(url, params=params, timeout=timeout)
-            response.raise_for_status()
-            data = response.json()
+            with tracer.start_as_current_span(
+                "make_api_request"
+            ) as span:  # noqa: ASYNC100
+                if api_name:
+                    span.set_attribute("api.name", api_name)
+                response = requests.get(url, params=params, timeout=timeout)
+                response.raise_for_status()
+                data = response.json()
 
             # Check for API-specific error messages
             if "Error Message" in data:
@@ -73,6 +83,7 @@ def make_api_request(
             return data
         except requests.exceptions.RequestException as e:
             logger.warning(f"API request attempt {attempt + 1} failed: {e}")
+            capture_exception(e)
             if attempt == MAX_RETRIES - 1:
                 raise APIException(
                     f"Failed to fetch data after {MAX_RETRIES} attempts: {e}"

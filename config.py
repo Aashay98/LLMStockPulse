@@ -54,3 +54,8 @@ MAX_AGENT_ITERATIONS = int(os.getenv("MAX_AGENT_ITERATIONS"))
 MEMORY_WINDOW_SIZE = int(os.getenv("MEMORY_WINDOW_SIZE"))
 # SQLAlchemy database URL (e.g., postgresql+psycopg2://user:pass@host/db)
 DB_URL = os.getenv("DB_URL")
+
+# Observability configuration
+SENTRY_DSN = os.getenv("SENTRY_DSN")
+OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+METRICS_PORT = int(os.getenv("METRICS_PORT", "8000"))

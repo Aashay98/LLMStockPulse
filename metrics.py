@@ -9,6 +9,8 @@ project: ``Counter``, ``Histogram`` and ``start_http_server``.
 
 from __future__ import annotations
 
+import logging
+
 try:  # pragma: no cover - exercised in tests via fallback
     from prometheus_client import Counter, Histogram, start_http_server
 except Exception:  # pragma: no cover
@@ -89,9 +91,18 @@ ERROR_COUNTER = Counter(
 
 
 def start_metrics_server(port: int = 8000) -> None:
-    """Start an HTTP server for Prometheus to scrape metrics."""
+    """Start an HTTP server for Prometheus to scrape metrics.
 
-    start_http_server(port)
+    If the port is already in use, a warning is logged and the function
+    returns without raising an exception.
+    """
+
+    try:
+        start_http_server(port)
+    except OSError as exc:  # pragma: no cover - depends on system state
+        logging.getLogger(__name__).warning(
+            "Metrics server not started on port %s: %s", port, exc
+        )
 
 
 def get_metric_value(metric, **labels) -> float:

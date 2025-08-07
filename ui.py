@@ -7,8 +7,8 @@ from storage import clear_history, create_conversation, get_conversations, load_
 
 
 def login_screen() -> None:
-    """Login form that checks credentials against the database."""
-    """Login and registration form."""
+    """Display the login, registration, and password reset form."""
+
     st.markdown("## 🔐 Login")
     mode = st.radio("Mode", ["Login", "Register", "Reset Password"], horizontal=True)
 
@@ -78,7 +78,11 @@ def display_sidebar() -> None:
         if st.button("Logout"):
             st.session_state.authenticated = False
             st.session_state.user_id = ""
+            st.session_state.current_conversation = None
+            st.session_state.conversations = []
             st.session_state.conversation_history = []
+            st.session_state.latest_response = ""
+            st.session_state.last_user_query = ""
             st.rerun()
         st.markdown("## 🎛️ Controls")
 

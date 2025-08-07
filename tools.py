@@ -1,5 +1,6 @@
 import logging
 import time
+from functools import lru_cache
 from typing import Any, Dict, List
 
 import faiss
@@ -79,6 +80,37 @@ def make_api_request(
             time.sleep(2**attempt)  # Exponential backoff
 
 
+@lru_cache(maxsize=128)
+def _fetch_stock_data(stock_symbol: str, data_type: str = "intraday") -> str:
+    """Internal helper that fetches and formats stock data."""
+    # Validate stock symbol (ensures consistent caching key)
+    stock_symbol = validate_stock_symbol(stock_symbol)
+
+    params = {"symbol": stock_symbol, "apikey": ALPHA_VANTAGE_API_KEY}
+
+    # Configure API parameters based on data type
+    data_type_configs = {
+        "intraday": {"function": "TIME_SERIES_INTRADAY", "interval": "1min"},
+        "daily": {"function": "TIME_SERIES_DAILY_ADJUSTED"},
+        "fundamental": {"function": "OVERVIEW"},
+        "indicators": {
+            "function": "RSI",
+            "interval": "daily",
+            "time_period": "14",
+            "series_type": "close",
+        },
+        "financials": {"function": "INCOME_STATEMENT"},
+    }
+
+    if data_type not in data_type_configs:
+        return f"Invalid data type '{data_type}'. Choose from: {', '.join(data_type_configs.keys())}"
+
+    params.update(data_type_configs[data_type])
+    data = make_api_request(ALPHA_VANTAGE_BASE_URL, params, api_name="alpha_vantage")
+
+    return _format_stock_data(data, stock_symbol, data_type)
+
+
 @tool("stock_api_tool", return_direct=False)
 def get_stock_data(stock_symbol: str, data_type: str = "intraday") -> str:
     """
@@ -89,34 +121,7 @@ def get_stock_data(stock_symbol: str, data_type: str = "intraday") -> str:
         data_type: Type of data to fetch (intraday, daily, fundamental, indicators, financials)
     """
     try:
-        # Validate stock symbol
-        stock_symbol = validate_stock_symbol(stock_symbol)
-
-        params = {"symbol": stock_symbol, "apikey": ALPHA_VANTAGE_API_KEY}
-
-        # Configure API parameters based on data type
-        data_type_configs = {
-            "intraday": {"function": "TIME_SERIES_INTRADAY", "interval": "1min"},
-            "daily": {"function": "TIME_SERIES_DAILY_ADJUSTED"},
-            "fundamental": {"function": "OVERVIEW"},
-            "indicators": {
-                "function": "RSI",
-                "interval": "daily",
-                "time_period": "14",
-                "series_type": "close",
-            },
-            "financials": {"function": "INCOME_STATEMENT"},
-        }
-
-        if data_type not in data_type_configs:
-            return f"Invalid data type '{data_type}'. Choose from: {', '.join(data_type_configs.keys())}"
-
-        params.update(data_type_configs[data_type])
-        data = make_api_request(
-            ALPHA_VANTAGE_BASE_URL, params, api_name="alpha_vantage"
-        )
-
-        return _format_stock_data(data, stock_symbol, data_type)
+        return _fetch_stock_data(stock_symbol, data_type)
 
     except Exception as e:
         logger.error(f"Error fetching stock data for {stock_symbol}: {e}")
